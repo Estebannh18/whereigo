@@ -1,0 +1,67 @@
+# docker-compose.yml — orquestación local de Whereigo? (Fase 1)
+# Uso principal: desarrollo local con Docker Desktop funcionando. Para desplegar
+# en la nube se usa render.yaml (backend) + Vercel (frontend), no este archivo.
+# Redis y RabbitMQ quedan definidos aquí desde ya (Fases 5 y 8 del plan) pero
+# ningún servicio de código los usa todavía.
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-whereigo}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-whereigo_auth}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USERNAME:-whereigo}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    ports:
+      - '5672:5672'   # AMQP
+      - '15672:15672' # UI de administración
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-whereigo}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-changeme}
+
+  auth-service:
+    build: ./services/auth-service
+    restart: unless-stopped
+    env_file:
+      - ./services/auth-service/.env
+    environment:
+      DB_HOST: postgres
+    ports:
+      - '3001:3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  gateway:
+    build: ./services/gateway
+    restart: unless-stopped
+    env_file:
+      - ./services/gateway/.env
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:3001
+    ports:
+      - '3000:3000'
+    depends_on:
+      - auth-service
+
+volumes:
+  postgres_data:

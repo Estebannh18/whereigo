@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+
+# Datos GTFS/OSM crudos: pesan demasiado para git, se documentan en gtfs-data/README.md
+gtfs-data/*.zip
+gtfs-data/*.txt
+gtfs-data/*.pbf
+!gtfs-data/README.md
