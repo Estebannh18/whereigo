@@ -1,0 +1,171 @@
+# docker-compose.yml — orquestación local de Whereigo?
+# Uso principal: desarrollo local con Docker Desktop funcionando. Para desplegar
+# en la nube se usa render.yaml (backend) + Vercel (frontend), no este archivo.
+# Servicios: auth, gateway, traffic, simulator, alerts, ai y routes.
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-whereigo}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-whereigo_auth}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-multiple-dbs.sql:/docker-entrypoint-initdb.d/init-multiple-dbs.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USERNAME:-whereigo} -d ${DB_NAME:-whereigo_auth}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    hostname: rabbitmq
+    ports:
+      - '5672:5672'   # AMQP
+      - '15672:15672' # UI de administración
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-whereigo}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-changeme}
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-whereigo-secret-cookie-2026}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 45s
+
+  auth-service:
+    build: ./services/auth-service
+    restart: unless-stopped
+    env_file:
+      - ./services/auth-service/.env
+    environment:
+      DB_HOST: postgres
+    ports:
+      - '3001:3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  gateway:
+    build: ./services/gateway
+    restart: unless-stopped
+    env_file:
+      - ./services/gateway/.env
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:3001
+      TRAFFIC_SERVICE_URL: http://traffic-service:3002
+      ALERT_SERVICE_URL: http://alert-service:3003
+      AI_SERVICE_URL: http://ai-service:8000
+      ROUTE_SERVICE_URL: http://route-service:3004
+    ports:
+      - '3000:3000'
+    depends_on:
+      - auth-service
+      - traffic-service
+      - alert-service
+      - ai-service
+      - route-service
+
+  ai-service:
+    build: ./services/ai-service
+    restart: unless-stopped
+    env_file:
+      - ./services/ai-service/.env
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_ENABLED: "true"
+    ports:
+      - '8000:8000'
+    depends_on:
+      rabbitmq:
+        condition: service_started
+
+  route-service:
+    build: ./services/route-service
+    restart: unless-stopped
+    env_file:
+      - ./services/route-service/.env
+    environment:
+      DB_HOST: postgres
+      DB_NAME: whereigo_routes
+    ports:
+      - '3004:3004'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  traffic-service:
+    build: ./services/traffic-service
+    restart: unless-stopped
+    env_file:
+      - ./services/traffic-service/.env
+    environment:
+      DB_HOST: postgres
+      DB_NAME: whereigo_traffic
+      RABBITMQ_HOST: rabbitmq
+    ports:
+      - '3002:3002'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3002/health >/dev/null 2>&1 || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  alert-service:
+    build: ./services/alert-service
+    restart: unless-stopped
+    env_file:
+      - ./services/alert-service/.env
+    environment:
+      DB_HOST: postgres
+      DB_NAME: whereigo_alerts
+      RABBITMQ_HOST: rabbitmq
+    ports:
+      - '3003:3003'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3003/health >/dev/null 2>&1 || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  traffic-simulator:
+    build: ./services/traffic-simulator
+    restart: unless-stopped
+    env_file:
+      - ./services/traffic-simulator/.env
+    environment:
+      TRAFFIC_SERVICE_URL: http://traffic-service:3002
+    depends_on:
+      traffic-service:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  rabbitmq_data:

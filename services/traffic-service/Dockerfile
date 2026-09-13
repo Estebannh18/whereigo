@@ -1,0 +1,17 @@
+# services/traffic-service/Dockerfile
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+# Evita que un tsbuildinfo stale del host impida la emisión de archivos JS.
+RUN rm -f tsconfig.build.tsbuildinfo && npm run build
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package*.json ./
+RUN npm ci --omit=dev
+COPY --from=build /app/dist ./dist
+EXPOSE 3002
+CMD ["node", "dist/main.js"]
