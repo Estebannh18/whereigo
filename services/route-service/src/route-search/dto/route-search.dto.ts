@@ -12,22 +12,22 @@ export enum RoutePreference {
 export class RouteSearchDto {
   @ApiProperty({ example: 7.1193 })
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 8 })
+  @IsNumber()
   originLat!: number;
 
   @ApiProperty({ example: -73.1227 })
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 8 })
+  @IsNumber()
   originLon!: number;
 
   @ApiProperty({ example: 7.1384 })
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 8 })
+  @IsNumber()
   destinationLat!: number;
 
   @ApiProperty({ example: -73.1205 })
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 8 })
+  @IsNumber()
   destinationLon!: number;
 
   @ApiPropertyOptional({ enum: RoutePreference, default: RoutePreference.FASTEST })
