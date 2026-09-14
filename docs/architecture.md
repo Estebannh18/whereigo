@@ -1,4 +1,4 @@
-# Whereigo? — Decisiones de Arquitectura (Fase 0)
+# Whereigo? — Decisiones de Arquitectura
 
 Ciudad piloto: **Bucaramanga, Santander**. Este documento se actualiza en cada fase;
 lo que ya está construido se documenta como hecho, lo pendiente queda marcado `TODO`.
@@ -13,9 +13,9 @@ lo que ya está construido se documenta como hecho, lo pendiente queda marcado `
 | Auth Service | `services/auth-service` | — | ✅ Fase 1 |
 | Traffic Service | `services/traffic-service` | — | ✅ Fase A |
 | Traffic Simulator | `services/traffic-simulator` | — | ✅ Fase A |
-| Route/Transport Service | `services/route-service` | — | ⏳ Fase 3 |
+| Route/Transport Service | `services/route-service` | — | ✅ Demo |
 | Alert Service | `services/alert-service` | — | ✅ Fase B |
-| AI/ETA Service | `services/ai-service` (Python/FastAPI) | — | ⏳ Fase 4 |
+| AI/ETA Service | `services/ai-service` (Python/FastAPI) | — | ✅ Demo |
 
 `TODO`: asignar responsable de cada servicio entre los dos integrantes.
 
@@ -41,7 +41,7 @@ secretos independientes (`JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`).
 
 ---
 
-## 2.2 Contratos de API — Alert Service (Fase B)
+## 2.1 Contratos de API — Alert Service (Fase B)
 
 Base: `services/alert-service` (interno, puerto 3003) — expuesto al frontend solo
 a través del Gateway bajo el prefijo `/alerts`.
@@ -56,7 +56,7 @@ a través del Gateway bajo el prefijo `/alerts`.
 
 ---
 
-## 2.1 Contratos de API — Traffic Service (Fase A)
+## 2.2 Contratos de API — Traffic Service (Fase A)
 
 Base: `services/traffic-service` (interno, puerto 3002) — expuesto al frontend solo
 a través del Gateway bajo el prefijo `/traffic`.
@@ -125,8 +125,14 @@ segmentos reales de calles.
 | payload | jsonb, nullable | evento original completo |
 | created_at / updated_at | timestamp | |
 
-`TODO`: esquema de `route-service` (rutas, paraderos con PostGIS) y rutas favoritas
-— se cierra en Fase 3, antes de escribir el código (regla de oro del plan).
+### `routes` y `stops` (route-service, demo)
+
+`routes` contiene las rutas de transporte y `stops` sus paraderos ordenados. Las
+coordenadas se almacenan como `decimal` WGS84 para la demo de Bucaramanga; todavía
+no se usa una geometría PostGIS ni un motor de red vial.
+
+El `SeedModule` inserta, solo cuando `routes` está vacía, estas tres rutas con
+paraderos de ejemplo: `Centro - UIS`, `Cabecera - Centro` y `Lagos - Centro`.
 
 ---
 
@@ -209,6 +215,72 @@ en OpenTripPlanner (Fase 3).
 
 ---
 
-## 7. Reparto de trabajo
+## 7. Contratos de API — Route Service
+
+Base interna: `route-service` en el puerto `3004`. El frontend usa el Gateway
+con el prefijo `/routes`.
+
+| Método | Ruta pública vía Gateway | Auth | Descripción |
+|---|---|---|---|
+| GET | `/routes/route-search` | pública | Busca opciones de taxi directo y buses activos entre dos coordenadas |
+| GET | `/routes` | admin | Lista rutas con paraderos |
+| POST | `/routes` | admin | Crea una ruta y sus paraderos |
+| GET | `/routes/:id` | admin | Consulta una ruta |
+| PATCH | `/routes/:id` | admin | Actualiza una ruta y reemplaza sus paraderos |
+| DELETE | `/routes/:id` | admin | Elimina una ruta |
+| GET | `/stops/route/:routeId` | pública | Lista paraderos de una ruta |
+| POST | `/stops/route/:routeId` | admin | Agrega un paradero |
+| PATCH | `/stops/:id` | admin | Actualiza un paradero |
+| DELETE | `/stops/:id` | admin | Elimina un paradero |
+
+La búsqueda acepta `originLat`, `originLon`, `destinationLat`, `destinationLon`,
+`preference` (`cheapest`, `fastest`, `fewest_transfers`) y `departureTime`.
+Las coordenadas se convierten a número y se validan como latitud/longitud finitas.
+El trazado vial se obtiene desde `ROUTING_SERVICE_URL` usando una respuesta
+GeoJSON completa de OSRM (`overview=full`); si el router no responde, la opción
+se omite y nunca se dibuja una línea recta artificial.
+
+Para taxi, la demo aplica `$1.000 COP/km` sobre la distancia vial calculada, con
+una tarifa mínima de `$9.100 COP`. El AI puede estimar ETA, pero no reemplaza
+esta tarifa regulada.
+
+Las fuentes candidatas para incorporar rutas reales de buses son el catálogo de
+datos abiertos del **AMB** y los trazados oficiales de **Metrolínea/SITME**. Antes
+de agregarlos al seed se debe confirmar vigencia, paraderos y sentido de cada
+ruta; no se deben inventar recorridos a partir únicamente del nombre comercial.
+
+## 8. AI/ETA Service
+
+Base interna: `ai-service` en el puerto `8000`, expuesta por el Gateway bajo `/ai`.
+
+| Método | Ruta | Auth | Descripción |
+|---|---|---|---|
+| GET | `/ai/health` | pública | Estado y carga de modelos |
+| POST | `/ai/predict` | pública | Predice ETA y tarifa para coordenadas y hora de salida |
+| GET | `/ai/traffic-state` | pública | Estado de segmentos recibido desde RabbitMQ |
+
+El primer arranque puede tardar porque entrena el modelo sintético si no existen
+archivos en `app/models/`. La imagen tiene un healthcheck HTTP y espera RabbitMQ
+saludable antes de iniciar.
+
+## 9. Demo, favoritos y alcance actual
+
+- Usuario admin demo: `admin@whereigo.dev` / `Admin123!`. Se puede cambiar con
+  `DEMO_ADMIN_EMAIL` y `DEMO_ADMIN_PASSWORD`.
+- El admin se crea solo si ese correo no existe; no sobrescribe usuarios existentes.
+- Las rutas frecuentes se guardan actualmente en `localStorage` del navegador,
+  con un máximo de 10; todavía no existe persistencia por usuario en backend.
+- Las alertas activas se consultan cada cinco segundos y se muestran en el mapa y
+  en el dashboard. Si una alerta está a menos de 750 m de la ruta seleccionada,
+  se muestra un aviso y el botón de alternativa permite elegir otra opción ya
+  calculada; todavía no se recalcula una topología evitando segmentos afectados.
+- El buscador consulta alertas activas antes de pedir la geometría vial y solicita
+  alternativas a OSRM. Las geometrías que pasan dentro de `0.25 km` de una alerta
+  se descartan cuando existe otra alternativa; si el motor no ofrece una ruta
+  segura, se muestra la ruta principal con una advertencia explícita.
+- La búsqueda y el mapa están implementados para la demo; el cálculo de bus es
+  heurístico y no representa todavía una red vial multimodal real.
+
+## 10. Reparto de trabajo
 
 `TODO`: definir qué integrante lleva qué microservicio/fase.

@@ -12,7 +12,7 @@ import pandas as pd
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from app.model import TinyMLP, r2_score, train_models
+from app.model import FARE_TARGET_SCALE, TinyMLP, r2_score, train_models
 from app.rabbitmq.consumer import start_rabbitmq_consumer
 
 logging.basicConfig(level=logging.INFO)
@@ -32,7 +32,7 @@ traffic_state: dict[str, dict[str, Any]] = {}
 # --- Modelos ---
 eta_model: TinyMLP | None = None
 fare_model: TinyMLP | None = None
-feature_stats: dict[str, list[float]] = {"mean": [], "std": []}
+feature_stats: dict[str, Any] = {"mean": [], "std": []}
 model_features = [
     "distance_km",
     "avg_congestion",
@@ -108,6 +108,8 @@ def load_models() -> bool:
         fare_model.load("app/models/fare_model.npz")
         with open("app/models/feature_stats.json", "r") as f:
             feature_stats = json.load(f)
+        if "fare_scale" not in feature_stats:
+            return False
         logger.info("Modelos cargados desde app/models/")
         return True
     except FileNotFoundError:
@@ -256,11 +258,12 @@ def predict(req: PredictRequest):
     X_norm = (X - mean) / std
 
     eta = float(eta_model.predict(X_norm)[0, 0])
-    fare = float(fare_model.predict(X_norm)[0, 0])
+    fare_scale = float(feature_stats.get("fare_scale", FARE_TARGET_SCALE))
+    fare = float(fare_model.predict(X_norm)[0, 0]) * fare_scale
 
     return PredictResponse(
-        eta_minutes=round(eta, 1),
-        fare_cop=round(fare, 0),
+        eta_minutes=round(float(np.clip(eta, 1.0, 240.0)), 1),
+        fare_cop=round(float(np.clip(fare, 2500.0, 200000.0)), 0),
         distance_km=round(float(features["distance_km"].iloc[0]), 2),
         avg_congestion=round(float(features["avg_congestion"].iloc[0]), 1),
         is_peak_hour=bool(features["is_peak_hour"].iloc[0]),

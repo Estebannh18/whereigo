@@ -27,10 +27,12 @@ export class AlertProxyController {
   ) {
     const path = req.path.replace(/^\/alerts/, '') || '/';
     const targetPath = `/alerts${path}`;
+    const queryString = req.originalUrl.split('?')[1];
 
     return this.proxyService.forward({
       baseUrl: this.alertServiceUrl,
       path: targetPath,
+      queryString,
       method: req.method as any,
       body: req.body,
       authorizationHeader,

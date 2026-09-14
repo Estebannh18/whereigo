@@ -16,16 +16,19 @@ export class ProxyService {
   async forward<T = unknown>(params: {
     baseUrl: string;
     path: string;
+    queryString?: string;
     method: Method;
     body?: unknown;
     authorizationHeader?: string;
   }): Promise<T> {
-    const { baseUrl, path, method, body, authorizationHeader } = params;
+    const { baseUrl, path, queryString, method, body, authorizationHeader } = params;
 
     try {
       const response = await firstValueFrom(
         this.httpService.request<T>({
-          url: `${baseUrl}${path}`,
+          // Reuse the encoded query received by the gateway. This avoids
+          // dropping query params and preserves coordinate precision.
+          url: `${baseUrl}${path}${queryString ? `?${queryString}` : ''}`,
           method,
           data: body,
           headers: authorizationHeader ? { Authorization: authorizationHeader } : undefined,

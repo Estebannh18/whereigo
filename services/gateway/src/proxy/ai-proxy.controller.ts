@@ -27,10 +27,12 @@ export class AiProxyController {
     @Headers('authorization') authorizationHeader?: string,
   ) {
     const path = req.path.replace(/^\/ai/, '') || '/';
+    const queryString = req.originalUrl.split('?')[1];
 
     return this.proxyService.forward({
       baseUrl: this.aiServiceUrl,
       path,
+      queryString,
       method: req.method as any,
       body: req.body,
       authorizationHeader,

@@ -28,10 +28,12 @@ export class TrafficProxyController {
   ) {
     const path = req.path.replace(/^\/traffic/, '') || '/';
     const targetPath = `/traffic${path}`;
+    const queryString = req.originalUrl.split('?')[1];
 
     return this.proxyService.forward({
       baseUrl: this.trafficServiceUrl,
       path: targetPath,
+      queryString,
       method: req.method as any,
       body: req.body,
       authorizationHeader,

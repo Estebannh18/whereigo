@@ -1,6 +1,6 @@
 // services/route-service/src/routes/dto/create-route.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { RouteType } from '../entities/route.entity';
 import { CreateStopDto } from '../../stops/dto/create-stop.dto';
@@ -24,6 +24,11 @@ export class CreateRouteDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsOptional()
   perKmRate?: number;
+
+  @ApiPropertyOptional({ default: true })
+  @IsBoolean()
+  @IsOptional()
+  active?: boolean;
 
   @ApiProperty({ type: [CreateStopDto], description: 'Paraderos de la ruta ordenados' })
   @ValidateNested({ each: true })

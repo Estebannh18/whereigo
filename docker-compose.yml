@@ -93,7 +93,7 @@ services:
       - '8000:8000'
     depends_on:
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
 
   route-service:
     build: ./services/route-service
@@ -103,10 +103,15 @@ services:
     environment:
       DB_HOST: postgres
       DB_NAME: whereigo_routes
+      ROUTING_SERVICE_URL: https://router.project-osrm.org
+      ALERT_SERVICE_URL: http://alert-service:3003
+      INCIDENT_AVOIDANCE_RADIUS_KM: '0.25'
     ports:
       - '3004:3004'
     depends_on:
       postgres:
+        condition: service_healthy
+      alert-service:
         condition: service_healthy
 
   traffic-service:
@@ -124,7 +129,7 @@ services:
       postgres:
         condition: service_healthy
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:3002/health >/dev/null 2>&1 || exit 1']
       interval: 5s
@@ -147,7 +152,7 @@ services:
       postgres:
         condition: service_healthy
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:3003/health >/dev/null 2>&1 || exit 1']
       interval: 5s

@@ -33,6 +33,16 @@ function alertTypeLabel(type: Alert['alertType']): string {
   return type === 'incident' ? 'Incidente' : 'Ruta afectada';
 }
 
+function distanceKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const radians = (value: number) => (value * Math.PI) / 180;
+  const dLat = radians(b.lat - a.lat);
+  const dLon = radians(b.lon - a.lon);
+  const lat1 = radians(a.lat);
+  const lat2 = radians(b.lat);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
 export function DashboardPage() {
   const { user, logout } = useAuth();
   const [traffic, setTraffic] = useState<TrafficReading[]>([]);
@@ -78,6 +88,11 @@ export function DashboardPage() {
   };
 
   const routePath: RoutePoint[] | undefined = selectedRoute?.path;
+  const incidentOnRoute = Boolean(
+    routePath?.some((point) =>
+      alerts.some((alert) => distanceKm(point, { lat: Number(alert.latitude), lon: Number(alert.longitude) }) <= 0.75),
+    ),
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
@@ -122,6 +137,7 @@ export function DashboardPage() {
               if (last) setDestination({ lat: last.lat, lon: last.lon });
             }}
             selectedRoute={selectedRoute}
+            incidentOnRoute={incidentOnRoute}
           />
 
           {selectedRoute && (

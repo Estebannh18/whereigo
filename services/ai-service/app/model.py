@@ -6,6 +6,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+FARE_TARGET_SCALE = 10000.0
+
 
 class TinyMLP:
     """Perceptrón multicapa de 2 capas ocultas implementado en NumPy."""
@@ -124,10 +126,16 @@ def train_models(
     eta_r2 = r2_score(y_eta_test, eta_model.predict(X_test).flatten())
 
     fare_model = TinyMLP(input_size=len(feature_cols), hidden_size=16)
-    fare_model.fit(X_train, y_fare_train, epochs=300, lr=0.02)
-    fare_r2 = r2_score(y_fare_test, fare_model.predict(X_test).flatten())
+    # Keep the target in a range comparable to the network weights. Training
+    # directly with COP values makes this small NumPy model diverge.
+    fare_model.fit(X_train, y_fare_train / FARE_TARGET_SCALE, epochs=300, lr=0.02)
+    fare_r2 = r2_score(y_fare_test, fare_model.predict(X_test).flatten() * FARE_TARGET_SCALE)
 
-    return eta_model, fare_model, {"mean": mean.tolist(), "std": std.tolist()}
+    return eta_model, fare_model, {
+        "mean": mean.tolist(),
+        "std": std.tolist(),
+        "fare_scale": FARE_TARGET_SCALE,
+    }
 
 
 def r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:

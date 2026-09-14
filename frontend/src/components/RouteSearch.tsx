@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { httpClient } from '../lib/httpClient';
 
 export type RoutePreference = 'cheapest' | 'fastest' | 'fewest_transfers';
+type TransportMode = 'all' | 'bus' | 'taxi';
 
 export interface RouteOption {
   id: string;
@@ -16,6 +17,7 @@ export interface RouteOption {
   path: Array<{ lat: number; lon: number; type: 'stop' | 'walk' | 'origin' | 'destination' | 'transfer'; label?: string }>;
   instructions: string[];
   routeIds: string[];
+  incidentWarning?: string;
 }
 
 interface AiPrediction {
@@ -40,6 +42,7 @@ interface RouteSearchProps {
   onSetSelectionMode: (mode: 'origin' | 'destination' | null) => void;
   onSelectRoute: (route: EnrichedRouteOption | null) => void;
   selectedRoute: EnrichedRouteOption | null;
+  incidentOnRoute?: boolean;
 }
 
 const preferenceLabels: Record<RoutePreference, string> = {
@@ -69,6 +72,7 @@ export function RouteSearch({
   onSetSelectionMode,
   onSelectRoute,
   selectedRoute,
+  incidentOnRoute = false,
 }: RouteSearchProps) {
   const [preference, setPreference] = useState<RoutePreference>(() => {
     return (localStorage.getItem('whereigo_preference') as RoutePreference) ?? 'fastest';
@@ -79,8 +83,10 @@ export function RouteSearch({
     return now.toISOString().slice(0, 16);
   });
   const [results, setResults] = useState<EnrichedRouteOption[]>([]);
+  const [transportMode, setTransportMode] = useState<TransportMode>('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const visibleResults = results.filter((route) => transportMode === 'all' || route.type === transportMode);
 
   useEffect(() => {
     localStorage.setItem('whereigo_preference', preference);
@@ -121,7 +127,9 @@ export function RouteSearch({
             return {
               ...option,
               aiEta: prediction.eta_minutes,
-              aiFare: typeLabels[option.type] === 'Bus' ? option.estimatedFare : prediction.fare_cop,
+               // Taxi uses the regulated route-service calculation; AI remains
+               // responsible for ETA and does not replace that fare.
+               aiFare: option.type === 'bus' || option.type === 'taxi' ? option.estimatedFare : prediction.fare_cop,
             };
           } catch {
             return option;
@@ -207,7 +215,35 @@ export function RouteSearch({
       {results.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-slate-900">Rutas sugeridas</h3>
-          {results.map((route) => (
+          <div className="flex gap-2" role="group" aria-label="Filtrar tipo de transporte">
+            {(['all', 'bus', 'taxi'] as TransportMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setTransportMode(mode)}
+                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  transportMode === mode ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {mode === 'all' ? 'Todas' : mode === 'bus' ? 'Solo buses' : 'Solo taxi'}
+              </button>
+            ))}
+          </div>
+          {incidentOnRoute && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              Hay un incidente cerca de esta ruta. Puedes elegir otra opción calculada.
+            </div>
+          )}
+          {incidentOnRoute && selectedRoute && visibleResults.some((route) => route.id !== selectedRoute.id) && (
+            <button
+              type="button"
+              onClick={() => onSelectRoute(visibleResults.find((route) => route.id !== selectedRoute.id) ?? null)}
+              className="w-full rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+            >
+              Calcular ruta alternativa
+            </button>
+          )}
+          {visibleResults.map((route) => (
             <button
               key={route.id}
               onClick={() => onSelectRoute(route)}
@@ -237,11 +273,15 @@ export function RouteSearch({
                   <p className="font-semibold text-slate-800">{route.totalDistanceKm.toFixed(2)} km</p>
                 </div>
               </div>
+              {route.incidentWarning && (
+                <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">{route.incidentWarning}</p>
+              )}
               {route.transfers > 0 && (
                 <p className="mt-2 text-xs text-slate-500">{route.transfers} transbordo(s)</p>
               )}
             </button>
           ))}
+          {visibleResults.length === 0 && <p className="text-sm text-slate-500">No hay opciones para este filtro.</p>}
         </div>
       )}
     </div>
