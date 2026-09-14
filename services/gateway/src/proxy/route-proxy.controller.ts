@@ -27,11 +27,10 @@ export class RouteProxyController {
     @Headers('authorization') authorizationHeader?: string,
   ) {
     const path = req.path.replace(/^\/routes/, '') || '/';
-    const targetPath = `/routes${path}`;
 
     return this.proxyService.forward({
       baseUrl: this.routeServiceUrl,
-      path: targetPath,
+      path,
       method: req.method as any,
       body: req.body,
       authorizationHeader,
