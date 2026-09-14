@@ -1,5 +1,6 @@
 // services/route-service/src/route-search/dto/route-search.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export enum RoutePreference {
@@ -10,18 +11,22 @@ export enum RoutePreference {
 
 export class RouteSearchDto {
   @ApiProperty({ example: 7.1193 })
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 8 })
   originLat!: number;
 
   @ApiProperty({ example: -73.1227 })
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 8 })
   originLon!: number;
 
   @ApiProperty({ example: 7.1384 })
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 8 })
   destinationLat!: number;
 
   @ApiProperty({ example: -73.1205 })
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 8 })
   destinationLon!: number;
 
