@@ -1,0 +1,10 @@
+# services/ai-service/pyproject.toml
+# Configuración de las herramientas de la fase de Pruebas.
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120

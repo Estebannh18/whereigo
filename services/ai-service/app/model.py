@@ -1,10 +1,12 @@
 # services/ai-service/app/model.py
-import json
+import logging
 import os
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 FARE_TARGET_SCALE = 10000.0
 
@@ -130,6 +132,7 @@ def train_models(
     # directly with COP values makes this small NumPy model diverge.
     fare_model.fit(X_train, y_fare_train / FARE_TARGET_SCALE, epochs=300, lr=0.02)
     fare_r2 = r2_score(y_fare_test, fare_model.predict(X_test).flatten() * FARE_TARGET_SCALE)
+    logger.info("Modelos entrenados: R2 ETA=%.3f, R2 tarifa=%.3f", eta_r2, fare_r2)
 
     return eta_model, fare_model, {
         "mean": mean.tolist(),

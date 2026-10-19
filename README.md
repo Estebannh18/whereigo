@@ -6,6 +6,11 @@ Monorepo: `frontend` (React + Vite + TS + Tailwind), `services/auth-service` y
 `services/gateway` (NestJS + TypeScript). Decisiones de arquitectura completas en
 [`docs/architecture.md`](./docs/architecture.md).
 
+**Ciclo de vida del software** (Planificar → Monitorear con una herramienta por fase,
+sobre `auth-service` y `ai-service`): ver [`docs/ciclo-de-vida.md`](./docs/ciclo-de-vida.md).
+CI/CD en `.github/workflows/`, operación con Nagios en `ops/nagios/` y monitoreo con
+Prometheus + Grafana en `ops/monitoring/`.
+
 ## Estructura
 
 ```

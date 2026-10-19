@@ -1,0 +1,12 @@
+{
+  "name": "whereigo",
+  "private": true,
+  "description": "Whereigo? - herramientas de la fase Código (hooks de git). Cada servicio tiene su propio package.json.",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0"
+  }
+}

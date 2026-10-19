@@ -9,3 +9,10 @@ gtfs-data/*.zip
 gtfs-data/*.txt
 gtfs-data/*.pbf
 !gtfs-data/README.md
+
+# Ciclo de vida: artefactos de pruebas y modelos entrenados al arrancar
+coverage/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+services/ai-service/app/models/

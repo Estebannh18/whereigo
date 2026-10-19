@@ -1,0 +1,34 @@
+// .devcontainer/devcontainer.json
+// Mismo entorno en VS Code local o en GitHub Codespaces (sirve aunque Docker Desktop
+// no arranque en Windows): Node 20 para NestJS/React, Python 3.11 para ai-service
+// y Docker dentro del contenedor para levantar docker compose y Nagios.
+{
+  "name": "whereigo",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" },
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.11" },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "forwardPorts": [5173, 3000, 8080, 9090, 3001],
+  "portsAttributes": {
+    "5173": { "label": "frontend (Vite)" },
+    "3000": { "label": "gateway" },
+    "8080": { "label": "Nagios" },
+    "9090": { "label": "Prometheus" },
+    "3001": { "label": "Grafana" }
+  },
+  "postCreateCommand": "npm ci && npm ci --prefix services/auth-service && pip install -r services/ai-service/requirements-dev.txt",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "charliermarsh.ruff",
+        "ms-python.python",
+        "ms-azuretools.vscode-docker",
+        "github.vscode-github-actions"
+      ]
+    }
+  }
+}

@@ -5,14 +5,15 @@ import os
 import threading
 import time
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, Header, HTTPException, Response
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.model import FARE_TARGET_SCALE, TinyMLP, r2_score, train_models
+from app.model import FARE_TARGET_SCALE, TinyMLP, train_models
+from app.observability.metrics import RollingMAE, metrics_token_is_valid, record_prediction, render_metrics
 from app.rabbitmq.consumer import start_rabbitmq_consumer
 
 logging.basicConfig(level=logging.INFO)
@@ -25,6 +26,8 @@ RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", "5672"))
 RABBITMQ_USER = os.getenv("RABBITMQ_USER", "whereigo")
 RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD", "changeme")
 RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "traffic.events")
+# Versión del modelo: sale en /health, en las métricas y en las alertas de Nagios.
+MODEL_VERSION = os.getenv("MODEL_VERSION", "tinymlp-1.0")
 
 # Estado de tráfico en memoria: segment_id -> última lectura.
 traffic_state: dict[str, dict[str, Any]] = {}
@@ -32,6 +35,8 @@ traffic_state: dict[str, dict[str, Any]] = {}
 # --- Modelos ---
 eta_model: TinyMLP | None = None
 fare_model: TinyMLP | None = None
+# Calidad en producción: MAE móvil contra los valores reales que llegan a /feedback.
+rolling_mae = {"eta": RollingMAE(kind="eta"), "fare": RollingMAE(kind="fare")}
 feature_stats: dict[str, Any] = {"mean": [], "std": []}
 model_features = [
     "distance_km",
@@ -128,7 +133,7 @@ def rabbitmq_worker() -> None:
                 exchange=RABBITMQ_EXCHANGE,
                 on_traffic_update=handle_traffic_update,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - cualquier fallo de conexión se reintenta
             logger.error(f"RabbitMQ consumer error: {e}. Reintentando en 5s...")
             time.sleep(5)
 
@@ -176,6 +181,8 @@ class PredictRequest(BaseModel):
 
 
 class PredictResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())  # permite el campo model_version
+
     eta_minutes: float
     fare_cop: float
     distance_km: float
@@ -183,13 +190,25 @@ class PredictResponse(BaseModel):
     is_peak_hour: bool
     is_rainy: bool
     has_incident: bool
+    model_version: str
 
 
 class HealthResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())  # permite model_loaded/model_version
+
     status: str
     service: str
     models_loaded: bool
+    # model_loaded y model_version los revisa Nagios (--require model_loaded).
+    model_loaded: bool
+    model_version: str
     traffic_segments_known: int
+
+
+class FeedbackRequest(BaseModel):
+    kind: Literal["eta", "fare"]
+    predicted: float = Field(..., ge=0, description="Valor que predijo el modelo")
+    actual: float = Field(..., ge=0, description="Valor real observado al terminar el viaje")
 
 
 # --- Helpers ---
@@ -207,7 +226,7 @@ def build_features(req: PredictRequest) -> pd.DataFrame:
     from datetime import datetime
 
     departure = req.departure_time or datetime.now().isoformat()
-    dt = datetime.fromisoformat(departure.replace("Z", "+00:00"))
+    dt = datetime.fromisoformat(departure)  # Python 3.11+ acepta el sufijo "Z"
 
     distance = haversine_distance(
         req.origin_lat, req.origin_lon, req.destination_lat, req.destination_lon
@@ -238,10 +257,13 @@ def build_features(req: PredictRequest) -> pd.DataFrame:
 # --- Endpoints ---
 @app.get("/health", response_model=HealthResponse)
 def health():
+    loaded = eta_model is not None and fare_model is not None
     return HealthResponse(
         status="ok",
         service="ai-service",
-        models_loaded=eta_model is not None and fare_model is not None,
+        models_loaded=loaded,
+        model_loaded=loaded,
+        model_version=MODEL_VERSION,
         traffic_segments_known=len(traffic_state),
     )
 
@@ -249,8 +271,9 @@ def health():
 @app.post("/predict", response_model=PredictResponse)
 def predict(req: PredictRequest):
     if eta_model is None or fare_model is None or not feature_stats["mean"]:
-        return {"error": "Modelos no cargados"}, 503
+        raise HTTPException(status_code=503, detail="Modelos no cargados")
 
+    started = time.perf_counter()
     features = build_features(req)
     X = features[model_features].values
     mean = np.array(feature_stats["mean"])
@@ -261,6 +284,11 @@ def predict(req: PredictRequest):
     fare_scale = float(feature_stats.get("fare_scale", FARE_TARGET_SCALE))
     fare = float(fare_model.predict(X_norm)[0, 0]) * fare_scale
 
+    # Una sola inferencia produce ETA y tarifa: se registra la misma duración para ambas.
+    elapsed = time.perf_counter() - started
+    record_prediction("eta", MODEL_VERSION, elapsed)
+    record_prediction("fare", MODEL_VERSION, elapsed)
+
     return PredictResponse(
         eta_minutes=round(float(np.clip(eta, 1.0, 240.0)), 1),
         fare_cop=round(float(np.clip(fare, 2500.0, 200000.0)), 0),
@@ -269,7 +297,22 @@ def predict(req: PredictRequest):
         is_peak_hour=bool(features["is_peak_hour"].iloc[0]),
         is_rainy=bool(features["is_rainy"].iloc[0]),
         has_incident=bool(features["has_incident"].iloc[0]),
+        model_version=MODEL_VERSION,
     )
+
+
+@app.post("/feedback")
+def feedback(req: FeedbackRequest):
+    """Valor real de un viaje ya terminado: alimenta el MAE móvil (detección de drift)."""
+    return {"kind": req.kind, "mae": rolling_mae[req.kind].observe(req.predicted, req.actual)}
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics(authorization: str | None = Header(default=None)):
+    if not metrics_token_is_valid(authorization):
+        raise HTTPException(status_code=401, detail="Token de métricas inválido")
+    body, content_type = render_metrics()
+    return Response(content=body, media_type=content_type)
 
 
 @app.get("/traffic-state")
