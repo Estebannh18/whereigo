@@ -27,7 +27,7 @@ RABBITMQ_USER = os.getenv("RABBITMQ_USER", "whereigo")
 RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD", "changeme")
 RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "traffic.events")
 # Versión del modelo: sale en /health, en las métricas y en las alertas de Nagios.
-MODEL_VERSION = os.getenv("MODEL_VERSION", "tinymlp-1.0")
+MODEL_VERSION = os.getenv("MODEL_VERSION", "tinymlp-1.1")
 
 # Estado de tráfico en memoria: segment_id -> última lectura.
 traffic_state: dict[str, dict[str, Any]] = {}

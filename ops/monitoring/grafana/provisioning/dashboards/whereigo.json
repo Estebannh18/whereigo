@@ -78,7 +78,7 @@
       "id": 6,
       "type": "timeseries",
       "title": "MAE móvil del modelo de ETA (minutos)",
-      "description": "Error medio de las últimas 200 predicciones con valor real (/feedback). Alerta WhereigoModeloDegradado sobre 20.",
+      "description": "Error medio de las últimas 200 predicciones con valor real (/feedback). Alerta WhereigoModeloDegradado sobre 5.",
       "gridPos": { "x": 0, "y": 13, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [{ "refId": "A", "expr": "whereigo_model_mae_rolling{kind=\"eta\"}", "legendFormat": "MAE ETA" }],
@@ -86,7 +86,7 @@
         "defaults": {
           "unit": "m",
           "custom": { "thresholdsStyle": { "mode": "line" } },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 20 }] }
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 5 }] }
         }
       }
     },

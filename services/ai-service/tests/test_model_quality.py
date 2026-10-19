@@ -6,15 +6,15 @@ modelo no vio. Una línea base ingenua (predecir siempre el promedio) marca el p
 si el modelo no la supera, el entrenamiento está roto.
 
 MAE_ETA_MAXIMO es el mismo umbral de la alerta WhereigoModeloDegradado
-(ops/monitoring/alert-rules.yml). Hoy el TinyMLP da ~15 min de MAE en ETA: el
-umbral de 20 detecta si empeora, pero el modelo necesita mejorarse para bajar de 5.
+(ops/monitoring/alert-rules.yml). El TinyMLP 1.1 (Adam, mini-lotes y parada
+temprana) da ~2 min de MAE en ETA; el ruido del dataset sintético es de 2 min.
 """
 import numpy as np
 
 from app.main import generate_synthetic_dataset, model_features
 from app.model import FARE_TARGET_SCALE, train_models
 
-MAE_ETA_MAXIMO = 20.0
+MAE_ETA_MAXIMO = 5.0
 
 
 def _evaluate():

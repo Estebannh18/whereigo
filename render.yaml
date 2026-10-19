@@ -98,6 +98,6 @@ services:
       - key: RABBITMQ_ENABLED
         value: 'false'
       - key: MODEL_VERSION
-        value: tinymlp-1.0
+        value: tinymlp-1.1
       - key: METRICS_TOKEN
         sync: false
