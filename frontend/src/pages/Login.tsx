@@ -2,6 +2,8 @@
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { AuthLayout, PasswordInput } from '../components/AuthLayout';
+import { Notice, Spinner } from '../components/ui';
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -26,52 +28,48 @@ export function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-sm rounded-xl bg-white p-8 shadow-sm">
-        <h1 className="mb-1 text-2xl font-semibold text-slate-900">Whereigo?</h1>
-        <p className="mb-6 text-sm text-slate-500">Inicia sesión para planificar tu ruta.</p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Correo</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Contraseña</label>
-            <input
-              type="password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-            />
-          </div>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full rounded-md bg-slate-900 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-          >
-            {isSubmitting ? 'Ingresando...' : 'Ingresar'}
-          </button>
-        </form>
-
-        <p className="mt-4 text-center text-sm text-slate-500">
+    <AuthLayout
+      title="Bienvenido de nuevo"
+      subtitle="Inicia sesión para planificar tu ruta."
+      footer={
+        <>
           ¿No tienes cuenta?{' '}
-          <Link to="/register" className="font-medium text-slate-900 underline">
+          <Link to="/register" className="font-semibold text-brand-700 hover:text-brand-800 hover:underline">
             Regístrate
           </Link>
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div>
+          <label htmlFor="email" className="field-label">
+            Correo
+          </label>
+          <input
+            id="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="tu@correo.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="field-input"
+          />
+        </div>
+        <div>
+          <label htmlFor="password" className="field-label">
+            Contraseña
+          </label>
+          <PasswordInput value={password} onChange={setPassword} autoComplete="current-password" />
+        </div>
+
+        {error && <Notice tone="error">{error}</Notice>}
+
+        <button type="submit" disabled={isSubmitting} className="btn-primary w-full py-3">
+          {isSubmitting && <Spinner />}
+          {isSubmitting ? 'Ingresando...' : 'Ingresar'}
+        </button>
+      </form>
+    </AuthLayout>
   );
 }

@@ -1,6 +1,8 @@
 // frontend/src/components/FrequentRoutes.tsx
 import { useEffect, useState } from 'react';
 import { EnrichedRouteOption } from './RouteSearch';
+import { formatCOP, formatMinutes, routeColors, routeTypeLabels } from '../lib/routeStyle';
+import { EmptyState, Icon, RouteTypeIcon } from './ui';
 
 export interface SavedRoute {
   id: string;
@@ -21,6 +23,16 @@ interface FrequentRoutesProps {
 }
 
 const STORAGE_KEY = 'whereigo_frequent_routes';
+const MAX_ROUTES = 10;
+
+function savedAgo(iso: string): string {
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (minutes < 1) return 'hace un momento';
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  return new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+}
 
 export function FrequentRoutes({ currentRoute, origin, destination, onSelect }: FrequentRoutesProps) {
   const [routes, setRoutes] = useState<SavedRoute[]>([]);
@@ -54,7 +66,7 @@ export function FrequentRoutes({ currentRoute, origin, destination, onSelect }: 
       savedAt: new Date().toISOString(),
     };
     const filtered = routes.filter((r) => r.id !== saved.id);
-    persist([saved, ...filtered].slice(0, 10));
+    persist([saved, ...filtered].slice(0, MAX_ROUTES));
   };
 
   const remove = (id: string) => {
@@ -62,52 +74,60 @@ export function FrequentRoutes({ currentRoute, origin, destination, onSelect }: 
   };
 
   return (
-    <div className="rounded-xl bg-white p-6 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">Rutas frecuentes</h2>
+    <section aria-labelledby="frequent-routes-title">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-baseline gap-2">
+          <h2 id="frequent-routes-title" className="section-title">
+            Rutas frecuentes
+          </h2>
+          <span className="text-xs text-slate-400">
+            {routes.length}/{MAX_ROUTES}
+          </span>
+        </div>
         {currentRoute && (
-          <button
-            onClick={saveCurrent}
-            className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
-          >
+          <button onClick={saveCurrent} className="btn-secondary px-3 py-1.5 text-xs">
+            <Icon name="star" className="h-3.5 w-3.5 text-amber-500" />
             Guardar ruta actual
           </button>
         )}
       </div>
 
       {routes.length === 0 ? (
-        <p className="text-sm text-slate-500">No tienes rutas guardadas.</p>
+        <EmptyState icon="star" title="No tienes rutas guardadas.">
+          Elige una ruta y pulsa «Guardar ruta actual» para tenerla a mano.
+        </EmptyState>
       ) : (
-        <ul className="space-y-3">
+        <ul className="space-y-2">
           {routes.map((route) => (
-            <li key={route.id} className="rounded-lg border border-slate-200 p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="font-medium text-slate-900">{route.name}</p>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase text-slate-600">
-                  {route.type}
-                </span>
+            <li key={route.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
+                style={{ background: routeColors[route.type] }}
+                title={routeTypeLabels[route.type]}
+              >
+                <RouteTypeIcon type={route.type} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-slate-900">{route.name}</p>
+                <p className="text-xs text-slate-500">
+                  {formatCOP(route.estimatedFare, false)} · {formatMinutes(route.estimatedEtaMinutes)} · {savedAgo(route.savedAt)}
+                </p>
               </div>
-              <p className="text-xs text-slate-500">
-                ${Math.round(route.estimatedFare).toLocaleString('es-CO')} · {Math.round(route.estimatedEtaMinutes)} min
-              </p>
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={() => onSelect(route)}
-                  className="rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-medium text-blue-700"
-                >
-                  Usar ruta
-                </button>
-                <button
-                  onClick={() => remove(route.id)}
-                  className="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700"
-                >
-                  Eliminar
-                </button>
-              </div>
+              <button onClick={() => onSelect(route)} className="btn bg-brand-50 px-3 py-1.5 text-xs text-brand-700 hover:bg-brand-100">
+                Usar ruta
+              </button>
+              <button
+                onClick={() => remove(route.id)}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                aria-label={`Eliminar ${route.name}`}
+                title="Eliminar"
+              >
+                <Icon name="trash" />
+              </button>
             </li>
           ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }

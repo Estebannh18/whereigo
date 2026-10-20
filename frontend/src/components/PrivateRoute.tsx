@@ -1,6 +1,7 @@
 // frontend/src/components/PrivateRoute.tsx
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth, UserRole } from '../context/AuthContext';
+import { Logo, Spinner } from './ui';
 
 interface PrivateRouteProps {
   /** Si se omite, solo exige estar autenticado (cualquier rol). */
@@ -16,7 +17,15 @@ export function PrivateRoute({ allowedRoles }: PrivateRouteProps) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return <div className="flex h-screen items-center justify-center text-slate-500">Cargando...</div>;
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-5 bg-surface-muted">
+        <Logo />
+        <p className="flex items-center gap-2 text-sm text-slate-500">
+          <Spinner className="h-4 w-4 text-brand-600" />
+          Cargando...
+        </p>
+      </div>
+    );
   }
 
   if (!user) {
