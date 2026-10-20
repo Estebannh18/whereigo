@@ -14,10 +14,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.model import FARE_TARGET_SCALE, TinyMLP, train_models
+from app.observability.logging import setup_logging
 from app.observability.metrics import RollingMAE, metrics_token_is_valid, record_prediction, render_metrics
 from app.rabbitmq.consumer import start_rabbitmq_consumer
 
-logging.basicConfig(level=logging.INFO)
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # --- Configuración ---
@@ -29,6 +30,8 @@ RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD", "changeme")
 RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "traffic.events")
 # Versión del modelo: sale en /health, en las métricas y en las alertas de Nagios.
 MODEL_VERSION = os.getenv("MODEL_VERSION", "tinymlp-1.1")
+# Carpeta de los artefactos del modelo (.npz + feature_stats.json). Si no existen, se entrenan y guardan ahí.
+MODEL_PATH = os.getenv("MODEL_PATH", "app/models")
 
 # Estado de tráfico en memoria: segment_id -> última lectura.
 traffic_state: dict[str, dict[str, Any]] = {}
@@ -97,28 +100,28 @@ def generate_synthetic_dataset(n_samples: int = 3000) -> pd.DataFrame:
 
 
 def save_models() -> None:
-    os.makedirs("app/models", exist_ok=True)
+    os.makedirs(MODEL_PATH, exist_ok=True)
     if eta_model:
-        eta_model.save("app/models/eta_model.npz")
+        eta_model.save(os.path.join(MODEL_PATH, "eta_model.npz"))
     if fare_model:
-        fare_model.save("app/models/fare_model.npz")
-    with open("app/models/feature_stats.json", "w") as f:
+        fare_model.save(os.path.join(MODEL_PATH, "fare_model.npz"))
+    with open(os.path.join(MODEL_PATH, "feature_stats.json"), "w") as f:
         json.dump(feature_stats, f)
-    logger.info("Modelos guardados en app/models/")
+    logger.info("Modelos guardados", extra={"event": "models_saved", "model_path": MODEL_PATH})
 
 
 def load_models() -> bool:
     global eta_model, fare_model, feature_stats
     try:
         eta_model = TinyMLP(input_size=len(model_features), hidden_size=16)
-        eta_model.load("app/models/eta_model.npz")
+        eta_model.load(os.path.join(MODEL_PATH, "eta_model.npz"))
         fare_model = TinyMLP(input_size=len(model_features), hidden_size=16)
-        fare_model.load("app/models/fare_model.npz")
-        with open("app/models/feature_stats.json", "r") as f:
+        fare_model.load(os.path.join(MODEL_PATH, "fare_model.npz"))
+        with open(os.path.join(MODEL_PATH, "feature_stats.json"), "r") as f:
             feature_stats = json.load(f)
         if "fare_scale" not in feature_stats:
             return False
-        logger.info("Modelos cargados desde app/models/")
+        logger.info("Modelos cargados", extra={"event": "models_loaded", "model_path": MODEL_PATH})
         return True
     except FileNotFoundError:
         return False
@@ -312,7 +315,7 @@ def predict(req: PredictRequest):
     record_prediction("eta", MODEL_VERSION, elapsed)
     record_prediction("fare", MODEL_VERSION, elapsed)
 
-    return PredictResponse(
+    response = PredictResponse(
         eta_minutes=round(float(np.clip(eta, 1.0, 240.0)), 1),
         fare_cop=round(float(np.clip(fare, 2500.0, 200000.0)), 0),
         distance_km=round(float(features["distance_km"].iloc[0]), 2),
@@ -322,6 +325,20 @@ def predict(req: PredictRequest):
         has_incident=bool(features["has_incident"].iloc[0]),
         model_version=MODEL_VERSION,
     )
+    # MLOps: cada predicción queda con sus variables de entrada para poder compararla
+    # después con el valor real (/feedback) y detectar drift. Sin coordenadas del usuario.
+    logger.info(
+        "prediccion",
+        extra={
+            "event": "prediction",
+            "model_version": MODEL_VERSION,
+            "features": {name: float(features[name].iloc[0]) for name in model_features},
+            "eta_minutes": response.eta_minutes,
+            "fare_cop": response.fare_cop,
+            "latency_ms": round(elapsed * 1000, 2),
+        },
+    )
+    return response
 
 
 @app.post("/feedback")

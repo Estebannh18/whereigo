@@ -63,6 +63,7 @@ jobs:
           cache-dependency-path: services/auth-service/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm run format:check
       - run: npm test -- --coverage
       - run: npm run build
       # Solo dependencias de producción. Bloquea vulnerabilidades críticas; las altas

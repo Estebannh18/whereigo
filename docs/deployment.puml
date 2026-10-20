@@ -1,0 +1,58 @@
+' docs/deployment.puml — Qué corre dónde (staging y operación).
+' Ver con la extensión PlantUML de VS Code o en https://www.plantuml.com/plantuml
+@startuml whereigo-deployment
+title Whereigo? — Diagrama de despliegue
+skinparam shadowing false
+skinparam defaultFontName Arial
+left to right direction
+
+actor "Usuario" as user
+
+cloud "Vercel" as vercel {
+  node "frontend\n(React + Vite, SPA)" as fe
+}
+
+cloud "Render (plan gratis)" as render {
+  node "whereigo-gateway\n(NestJS)" as gw
+  node "whereigo-auth-service\n(NestJS)\n/health · /health/ready · /metrics" as auth
+  node "whereigo-ai-service\n(FastAPI + TinyMLP)\n/health · /health/ready · /metrics" as ai
+  database "whereigo-postgres\n(Postgres administrado,\nvence a los 30 días)" as pg
+}
+
+cloud "GitHub" as github {
+  node "Actions\nci.yml · deploy.yml · codeql.yml" as actions
+  artifact "GHCR\nwhereigo-auth-service\nwhereigo-ai-service" as ghcr
+}
+
+node "Equipo de operación\n(PC, VM o Codespaces)" as ops {
+  node "Nagios Core 4.5\n:8080" as nagios
+  node "Prometheus :9090\n+ Grafana :3001" as prom
+}
+
+cloud "Telegram" as tg
+
+user --> fe : HTTPS
+fe --> gw : HTTPS + JWT
+gw --> auth : /auth/*
+gw --> ai : /ai/*
+auth --> pg : TLS
+
+actions --> ghcr : imágenes escaneadas (Trivy)
+actions --> render : deploy hooks\n(solo con CI en verde)
+
+nagios --> fe : página principal
+nagios --> gw : /health + login → ETA
+nagios --> auth : /health, /health/ready
+nagios --> ai : /health, /health/ready
+nagios --> render : redeploy automático\n(deploy hook)
+nagios --> tg : alertas
+
+prom --> auth : /metrics (Bearer token)
+prom --> ai : /metrics (Bearer token)
+
+note bottom of ops
+  En local, docker-compose.yml levanta además
+  traffic, route, alert, el simulador,
+  RabbitMQ y Redis (aún no desplegados en Render).
+end note
+@enduml

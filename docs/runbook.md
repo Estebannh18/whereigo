@@ -68,3 +68,48 @@ Prometheus disparó `WhereigoModeloDegradado`: el MAE móvil del ETA (`/feedback
 1. Generar el valor nuevo en la plataforma (Render, Telegram, deploy hook).
 2. Actualizar GitHub Secrets / env group de Render / `ops/nagios/.env`.
 3. `docker compose -f ops/nagios/docker-compose.yml up -d` para que Nagios lo tome.
+
+## Respaldar y restaurar Postgres
+
+La base gratis de Render **vence a los 30 días** de creada y se borra 14 días después. Antes de esa fecha hay que tener un respaldo.
+
+**Respaldar** (la *External Database URL* está en Render → `whereigo-postgres` → Connect):
+
+```bash
+# Con Docker no hace falta instalar Postgres. La URL va entre comillas y nunca se sube al repo.
+docker run --rm -v "$PWD:/backup" postgres:16-alpine \
+  pg_dump "$RENDER_DATABASE_URL" --format=custom --no-owner --file=/backup/whereigo-$(date +%F).dump
+```
+
+**Restaurar** en una base nueva (otra base de Render, o la local del compose para probar):
+
+```bash
+# 1. En Render: crear la base nueva (o volver a aplicar el Blueprint) y copiar su External Database URL.
+# 2. Restaurar el respaldo:
+docker run --rm -v "$PWD:/backup" postgres:16-alpine \
+  pg_restore --dbname="$NUEVA_DATABASE_URL" --no-owner --clean --if-exists /backup/whereigo-AAAA-MM-DD.dump
+# 3. Si la base cambió: en Render, actualizar DATABASE_URL de whereigo-auth-service (el Blueprint lo hace solo
+#    si la base es la del render.yaml) y redesplegar.
+# 4. Verificar: /health/ready del auth-service debe dar database=up, y el login con una cuenta existente debe funcionar.
+```
+
+Probar la restauración en local antes de necesitarla:
+
+```bash
+docker compose up -d postgres
+docker compose exec -T postgres pg_restore -U whereigo -d whereigo_auth --no-owner --clean --if-exists < whereigo-AAAA-MM-DD.dump
+```
+
+Guardar los `.dump` fuera del repo (nunca en git: tienen hashes de contraseñas y correos).
+
+## Cuentas y administradores
+
+| Plataforma | Qué hay ahí | Administra | Respaldo |
+|---|---|---|---|
+| GitHub ([Estebannh18/whereigo](https://github.com/Estebannh18/whereigo)) | Código, Actions, GHCR, Secrets del entorno `staging` | Juan Esteban Hernández (`@Estebannh18`) | Juan José Gamboa (colaborador) |
+| Render | Postgres, gateway, auth-service, ai-service, deploy hooks | Juan Esteban Hernández (workspace del corte anterior) | Juan José Gamboa |
+| Vercel | Frontend y previews por PR | Juan Esteban Hernández | Juan José Gamboa |
+| Trello ([DevOps Whereigo?](https://trello.com/b/RJ80fDhn/devops-whereigo)) | Backlog por fase y sprints | Juan Esteban Hernández | Juan José Gamboa, Carlos Pineda |
+| Telegram (bot de Nagios) | Alertas de operación | Quien creó el bot con BotFather | El otro integrante |
+
+Si alguien pierde el acceso: el administrador lo vuelve a invitar. Si es el administrador quien pierde el acceso, lo recupera por el correo de la cuenta. **Nunca** se comparten contraseñas; cada uno entra con su cuenta.

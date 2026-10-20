@@ -17,7 +17,9 @@ const CONFIG: Record<string, string> = {
 
 const user = { id: 'u-1', email: 'ana@whereigo.dev', passwordHash: 'hash', role: UserRole.USER } as User;
 
-type UsersMock = jest.Mocked<Pick<UsersService, 'findByEmail' | 'findById' | 'validatePassword' | 'toPublic' | 'create'>>;
+type UsersMock = jest.Mocked<
+  Pick<UsersService, 'findByEmail' | 'findById' | 'validatePassword' | 'toPublic' | 'create'>
+>;
 
 describe('AuthService', () => {
   let users: UsersMock;
@@ -52,14 +54,21 @@ describe('AuthService', () => {
   it('contraseña incorrecta y correo inexistente dan el mismo error genérico', async () => {
     users.findByEmail.mockResolvedValueOnce(user);
     users.validatePassword.mockResolvedValueOnce(false);
-    await expect(service.login(user.email, 'mala')).rejects.toThrow(new UnauthorizedException('Credenciales inválidas.'));
+    await expect(service.login(user.email, 'mala')).rejects.toThrow(
+      new UnauthorizedException('Credenciales inválidas.'),
+    );
 
     users.findByEmail.mockResolvedValueOnce(null);
-    await expect(service.login('nadie@x.dev', 'x')).rejects.toThrow(new UnauthorizedException('Credenciales inválidas.'));
+    await expect(service.login('nadie@x.dev', 'x')).rejects.toThrow(
+      new UnauthorizedException('Credenciales inválidas.'),
+    );
   });
 
   it('refresh con un refresh token válido emite un par nuevo', async () => {
-    const refreshToken = jwt.sign({ sub: 'u-1', email: user.email, role: 'user' }, { secret: CONFIG.JWT_REFRESH_SECRET });
+    const refreshToken = jwt.sign(
+      { sub: 'u-1', email: user.email, role: 'user' },
+      { secret: CONFIG.JWT_REFRESH_SECRET },
+    );
     users.findById.mockResolvedValue(user);
 
     const tokens = await service.refresh(refreshToken);
