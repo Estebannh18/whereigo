@@ -32,6 +32,9 @@ services:
       # Mismo valor que ops/monitoring/secrets/metrics_token (Prometheus).
       - key: METRICS_TOKEN
         sync: false
+      # Clave del admin demo que crea el seed. Sin ella se usaría la clave por defecto del código.
+      - key: DEMO_ADMIN_PASSWORD
+        sync: false
       - key: DATABASE_URL
         fromDatabase:
           name: whereigo-postgres

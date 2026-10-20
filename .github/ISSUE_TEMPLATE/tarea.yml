@@ -1,0 +1,23 @@
+name: Tarea
+description: Trabajo planeado (normalmente enlazado a una tarjeta de Trello)
+title: "feat(<servicio>): "
+body:
+  - type: input
+    id: trello
+    attributes:
+      label: Tarjeta de Trello
+      placeholder: https://trello.com/c/...
+  - type: dropdown
+    id: fase
+    attributes:
+      label: Fase del ciclo de vida
+      options: [Planificar, Código, Construir, Pruebas, Liberar, Desplegar, Operar, Monitorear]
+    validations:
+      required: true
+  - type: textarea
+    id: objetivo
+    attributes:
+      label: Objetivo y criterios de aceptación
+      placeholder: "- [ ] ...\n- [ ] ..."
+    validations:
+      required: true

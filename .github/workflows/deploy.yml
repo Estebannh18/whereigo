@@ -41,7 +41,7 @@ jobs:
         run: |
           if [ -z "$BASE_URL" ]; then exit 0; fi
           sleep 60
-          for i in $(seq 1 20); do
+          for _ in $(seq 1 20); do
             if curl -fsS --max-time 30 "$BASE_URL/health"; then
               echo "✅ ${{ matrix.service }} responde" >> "$GITHUB_STEP_SUMMARY"; exit 0
             fi

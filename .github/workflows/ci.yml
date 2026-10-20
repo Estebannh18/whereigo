@@ -20,6 +20,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  secrets:
+    # Fase Código/Liberar: el mismo gitleaks del hook local, sobre todo el historial,
+    # por si alguien hizo commit sin hooks activos. Corre siempre (no depende de carpetas).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Buscar secretos con gitleaks
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 git /repo --redact --verbose
+
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -97,7 +108,7 @@ jobs:
 
   publish:
     # Fase Liberar: solo en main y solo si todo lo anterior pasó o se omitió.
-    needs: [changes, auth-service, ai-service]
+    needs: [secrets, changes, auth-service, ai-service]
     if: ${{ github.ref == 'refs/heads/main' && !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     permissions:

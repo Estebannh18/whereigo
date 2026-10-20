@@ -33,9 +33,11 @@ Nagios ya intentó un redeploy automático en Render (máximo uno cada 30 minuto
 
 ## dependencia-caida
 
-`/health/ready` del auth-service dice qué dependencia falló. Hoy la única es `database` (Postgres).
+`/health/ready` dice qué dependencia falló: `database` en auth-service; `model` y `rabbitmq` en ai-service.
 
 - `database`: revisar que la base de Render no haya expirado (la gratuita vence a los **30 días** de creada). Restaurar desde el último `pg_dump`.
+- `model`: ver [modelo-no-cargado](#modelo-no-cargado).
+- `rabbitmq` (solo con `RABBITMQ_ENABLED=true`): el ai-service reintenta cada 5 s solo. Revisar que el broker esté arriba (`docker compose ps rabbitmq` en local). Mientras tanto el ETA sigue funcionando con la congestión por defecto.
 
 ## modelo-no-cargado
 

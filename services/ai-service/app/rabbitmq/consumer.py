@@ -17,6 +17,7 @@ def start_rabbitmq_consumer(
     password: str,
     exchange: str,
     on_traffic_update: Callable[[dict[str, Any]], None],
+    on_connected: Callable[[], None] | None = None,
 ) -> None:
     credentials = pika.PlainCredentials(user, password)
     parameters = pika.ConnectionParameters(
@@ -50,4 +51,6 @@ def start_rabbitmq_consumer(
 
     channel.basic_consume(queue=queue_name, on_message_callback=callback)
     logger.info(f"AI Service escuchando cola {queue_name} en exchange {exchange}")
+    if on_connected:
+        on_connected()  # lo usa /health/ready para reportar RabbitMQ arriba
     channel.start_consuming()

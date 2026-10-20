@@ -66,6 +66,16 @@ define service {
     notes_url               ${WHEREIGO_REPO_URL}/blob/main/docs/runbook.md#modelo-no-cargado
 }
 
+define service {
+    use                     whereigo-service
+    host_name               ai-service
+    service_description     Dependencias /health/ready
+    ; Modelo y, si RABBITMQ_ENABLED=true, la conexión con RabbitMQ.
+    check_command           whereigo_check_health!/health/ready!3!10!
+    contact_groups          resp-juanjo
+    notes_url               ${WHEREIGO_REPO_URL}/blob/main/docs/runbook.md#dependencia-caida
+}
+
 # Transacción sintética: un usuario de monitoreo hace login y pide un ETA real
 # por el gateway. Prueba gateway + auth + IA juntos, como lo vive el usuario.
 define service {

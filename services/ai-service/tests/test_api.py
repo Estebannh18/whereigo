@@ -21,6 +21,43 @@ def test_health_reporta_modelo_cargado_y_version(client):
     assert body["model_version"]
 
 
+def test_ready_sin_rabbitmq_solo_revisa_el_modelo(client):
+    response = client.get("/health/ready")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["details"]["model"]["status"] == "up"
+    assert "rabbitmq" not in body["details"]  # RABBITMQ_ENABLED=false en las pruebas
+
+
+def test_ready_sin_modelo_responde_503_y_lo_nombra(client, monkeypatch):
+    monkeypatch.setattr("app.main.fare_model", None)
+    response = client.get("/health/ready")
+    assert response.status_code == 503
+    assert response.json()["status"] == "error"
+    assert response.json()["error"]["model"]["status"] == "down"
+
+
+def test_ready_con_rabbitmq_habilitado_y_caido(client, monkeypatch):
+    import app.main as ai_main
+
+    monkeypatch.setattr(ai_main, "RABBITMQ_ENABLED", True)
+    monkeypatch.setitem(ai_main.rabbitmq_state, "connected", False)
+    response = client.get("/health/ready")
+    assert response.status_code == 503
+    assert response.json()["error"] == {"rabbitmq": {"status": "down"}}
+
+
+def test_ready_con_rabbitmq_conectado(client, monkeypatch):
+    import app.main as ai_main
+
+    monkeypatch.setattr(ai_main, "RABBITMQ_ENABLED", True)
+    monkeypatch.setitem(ai_main.rabbitmq_state, "connected", True)
+    response = client.get("/health/ready")
+    assert response.status_code == 200
+    assert response.json()["details"]["rabbitmq"] == {"status": "up"}
+
+
 def test_predict_devuelve_eta_y_tarifa_en_rango(client):
     response = client.post("/predict", json=TRAYECTO)
     assert response.status_code == 200

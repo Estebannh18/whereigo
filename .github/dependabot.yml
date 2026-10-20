@@ -1,0 +1,38 @@
+# .github/dependabot.yml
+# Fase Liberar (DevSecOps): PRs semanales con actualizaciones de dependencias de los
+# dos microservicios del ciclo de vida, sus imágenes base y las Actions del CI.
+# Las mayores de NestJS (10 -> 12) se ignoran: esa migración se hace a mano.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /services/auth-service
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 5
+    commit-message: { prefix: "chore(auth)" }
+    groups:
+      menores:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "@nestjs/*"
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: pip
+    directory: /services/ai-service
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 5
+    commit-message: { prefix: "chore(ai)" }
+
+  - package-ecosystem: docker
+    directory: /services/auth-service
+    schedule: { interval: monthly }
+    commit-message: { prefix: "chore(auth)" }
+
+  - package-ecosystem: docker
+    directory: /services/ai-service
+    schedule: { interval: monthly }
+    commit-message: { prefix: "chore(ai)" }
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
+    commit-message: { prefix: "ci" }

@@ -1,0 +1,36 @@
+name: Bug
+description: Algo que funcionaba (o debería) y no funciona
+title: "fix(<servicio>): "
+labels: [bug]
+body:
+  - type: dropdown
+    id: servicio
+    attributes:
+      label: Servicio
+      options: [frontend, gateway, auth-service, ai-service, traffic-service, route-service, alert-service, ops/CI]
+    validations:
+      required: true
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Pasos para reproducirlo
+      placeholder: "1. POST /auth/login con ...\n2. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Qué esperabas y qué pasó
+    validations:
+      required: true
+  - type: input
+    id: ambiente
+    attributes:
+      label: Ambiente
+      placeholder: local / staging (Render) / Vercel preview
+  - type: textarea
+    id: evidencia
+    attributes:
+      label: Logs o alerta de Nagios
+      description: Sin tokens, contraseñas ni datos personales.
+      render: text

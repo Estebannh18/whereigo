@@ -10,6 +10,7 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, Header, HTTPException, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.model import FARE_TARGET_SCALE, TinyMLP, train_models
@@ -31,6 +32,8 @@ MODEL_VERSION = os.getenv("MODEL_VERSION", "tinymlp-1.1")
 
 # Estado de tráfico en memoria: segment_id -> última lectura.
 traffic_state: dict[str, dict[str, Any]] = {}
+# True mientras el consumidor tiene una conexión abierta con RabbitMQ (/health/ready).
+rabbitmq_state = {"connected": False}
 
 # --- Modelos ---
 eta_model: TinyMLP | None = None
@@ -132,10 +135,14 @@ def rabbitmq_worker() -> None:
                 password=RABBITMQ_PASSWORD,
                 exchange=RABBITMQ_EXCHANGE,
                 on_traffic_update=handle_traffic_update,
+                on_connected=lambda: rabbitmq_state.update(connected=True),
             )
         except Exception as e:  # noqa: BLE001 - cualquier fallo de conexión se reintenta
             logger.error(f"RabbitMQ consumer error: {e}. Reintentando en 5s...")
+            rabbitmq_state["connected"] = False
             time.sleep(5)
+        else:
+            rabbitmq_state["connected"] = False
 
 
 def handle_traffic_update(event: dict[str, Any]) -> None:
@@ -266,6 +273,22 @@ def health():
         model_version=MODEL_VERSION,
         traffic_segments_known=len(traffic_state),
     )
+
+
+@app.get("/health/ready")
+def ready():
+    """Dependencias en el formato de @nestjs/terminus que entiende el plugin de Nagios.
+
+    RabbitMQ solo cuenta si está habilitado: en Render gratis corre sin broker.
+    """
+    loaded = eta_model is not None and fare_model is not None
+    details = {"model": {"status": "up" if loaded else "down", "version": MODEL_VERSION}}
+    if RABBITMQ_ENABLED:
+        details["rabbitmq"] = {"status": "up" if rabbitmq_state["connected"] else "down"}
+    info = {name: d for name, d in details.items() if d["status"] == "up"}
+    error = {name: d for name, d in details.items() if d["status"] != "up"}
+    body = {"status": "error" if error else "ok", "info": info, "error": error, "details": details}
+    return JSONResponse(status_code=503 if error else 200, content=body)
 
 
 @app.post("/predict", response_model=PredictResponse)

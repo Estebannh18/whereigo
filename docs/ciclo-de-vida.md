@@ -11,27 +11,28 @@ Se llevan **dos microservicios** por todas las fases como proyectos de software 
 
 | Fase | Herramienta principal | Apoyo | Evidencia en el repo |
 |---|---|---|---|
-| Planificar | **Trello** | ADRs | Tablero (enlace abajo), [docs/adr/](adr/) |
-| Código | **Git + GitHub** | VS Code + devcontainer, Husky + lint-staged + gitleaks | [.devcontainer/](../.devcontainer/devcontainer.json), [.husky/pre-commit](../.husky/pre-commit), [.lintstagedrc.mjs](../.lintstagedrc.mjs) |
+| Planificar | **Trello** | ADRs, estrategia de ambientes | [Tablero](https://trello.com/b/RJ80fDhn/devops-whereigo), [docs/adr/](adr/), [docs/environments.md](environments.md) |
+| Código | **Git + GitHub** | VS Code + devcontainer, Husky + lint-staged + gitleaks, plantillas de PR/issues, CODEOWNERS, .editorconfig | [.devcontainer/](../.devcontainer/devcontainer.json), [.husky/pre-commit](../.husky/pre-commit), [.lintstagedrc.mjs](../.lintstagedrc.mjs), [.github/](../.github/) |
 | Construir | **Nest CLI / pip** | Docker multi-etapa | `npm run build`, `services/*/Dockerfile` |
 | Probar | **Jest** (auth) y **pytest** (ai) | ESLint, Ruff | `services/auth-service/src/**/*.spec.ts`, `services/ai-service/tests/`, `ops/nagios/tests/` |
-| Liberar | **GitHub Actions** | GHCR + Trivy, `npm audit`, `pip-audit` | [.github/workflows/ci.yml](../.github/workflows/ci.yml) |
+| Liberar | **GitHub Actions** | GHCR + Trivy, gitleaks, `npm audit`, `pip-audit`, Dependabot | [.github/workflows/ci.yml](../.github/workflows/ci.yml), [.github/dependabot.yml](../.github/dependabot.yml) |
 | Desplegar | **Render** (deploy hooks) | Vercel para el frontend, smoke test de `/health` | [.github/workflows/deploy.yml](../.github/workflows/deploy.yml), [render.yaml](../render.yaml) |
 | Operar | **Nagios Core 4.5** | Telegram, redeploy automático, runbook | [ops/nagios/](../ops/nagios/), [docs/runbook.md](runbook.md), [ADR-004](adr/0004-nagios-para-operar.md) |
 | Monitorear | **Prometheus** | Grafana (dashboard), reglas de alerta | [ops/monitoring/](../ops/monitoring/) |
 
 ### Planificar: Trello
 
-> **Pendiente del equipo:** pegar aquí el enlace público del tablero y guardar 2–3 capturas en `docs/img/trello-*.png` (backlog, sprint en curso, tarjeta terminada).
+- Tablero (público): https://trello.com/b/RJ80fDhn/devops-whereigo
+- Una lista por fase del ciclo + flujo En progreso → En revisión (PR abierto) → Hecho. Cada tarjeta tiene su checklist; la Definition of Done está en la tarjeta "[S1] Definition of Done común" y en la [plantilla de PR](../.github/pull_request_template.md).
 
-- Tablero: `<enlace de Trello>`
+> **Pendiente del equipo:** guardar 2–3 capturas en `docs/img/trello-*.png` (backlog, sprint en curso, tarjeta terminada).
 
 ## Qué expone cada microservicio para el ciclo de vida
 
 | Endpoint | auth-service | ai-service | Lo usa |
 |---|---|---|---|
 | `GET /health` | proceso vivo | proceso vivo + `model_loaded` + `model_version` | Render, Docker, smoke test, Nagios |
-| `GET /health/ready` | Postgres (`SELECT 1`), formato terminus | — | Nagios |
+| `GET /health/ready` | Postgres (`SELECT 1`), formato terminus | modelo cargado + RabbitMQ (si `RABBITMQ_ENABLED`), formato terminus | Nagios |
 | `GET /metrics` (Bearer `METRICS_TOKEN`) | `http_requests_total`, `http_request_duration_seconds` | `whereigo_predictions_total`, `whereigo_prediction_latency_seconds`, `whereigo_model_mae_rolling` | Prometheus |
 | `POST /feedback` | — | valor real de un viaje → MAE móvil (drift) | Prometheus / alerta de modelo |
 
