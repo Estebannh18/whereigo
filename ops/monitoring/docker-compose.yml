@@ -1,6 +1,6 @@
 # ops/monitoring/docker-compose.yml
 # Levantar:  docker compose -f ops/monitoring/docker-compose.yml up -d
-# Prometheus: http://localhost:9090   Grafana: http://localhost:3001
+# Prometheus: http://localhost:9090   Grafana: http://localhost:3030
 services:
   prometheus:
     image: prom/prometheus:v2.53.2
@@ -22,7 +22,7 @@ services:
       - ./secrets/grafana_admin:/run/secrets/grafana_admin:ro
       - grafana_data:/var/lib/grafana
     ports:
-      - "127.0.0.1:3001:3000"
+      - "127.0.0.1:3030:3000"   # 3001 lo usa auth-service
     depends_on: [prometheus]
 
 volumes:

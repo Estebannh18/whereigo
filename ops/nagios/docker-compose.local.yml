@@ -1,0 +1,15 @@
+# ops/nagios/docker-compose.local.yml
+# Modo local: se suma a docker-compose.yml para que Nagios entre a la red del
+# stack de la raíz (docker compose up -d) y llegue a gateway, auth-service y ai-service
+# por su nombre. Uso: ver ops/nagios/local.env.example.
+services:
+  nagios:
+    networks: [default, whereigo]
+    extra_hosts:
+      # Linux no trae host.docker.internal por defecto (Docker Desktop sí).
+      - "host.docker.internal:host-gateway"
+
+networks:
+  whereigo:
+    name: whereigo_default
+    external: true

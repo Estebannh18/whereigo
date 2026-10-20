@@ -47,12 +47,33 @@ cd services/ai-service && pip install -r requirements-dev.txt && ruff check . &&
 docker build -t whereigo-nagios ops/nagios
 docker run --rm --env-file ops/nagios/ci.env --entrypoint sh whereigo-nagios -c 'sed -i "s|^exec /usr/local/bin/start_nagios|exit 0|" /usr/local/bin/whereigo-entrypoint && whereigo-entrypoint'
 
-# Monitorear: Prometheus (localhost:9090) y Grafana (localhost:3001)
+# Monitorear: Prometheus (localhost:9090) y Grafana (localhost:3030)
 mkdir -p ops/monitoring/secrets
 # metrics_token = mismo valor que METRICS_TOKEN en Render; grafana_admin = clave del admin de Grafana
 cp ops/monitoring/targets/whereigo.yml.example ops/monitoring/targets/whereigo.yml
 docker compose -f ops/monitoring/docker-compose.yml up -d
 ```
+
+### Demo en local (plan B si Render está dormido o falla)
+
+Todo el ciclo se puede mostrar en un solo equipo, con datos reales:
+
+```bash
+docker compose up -d                                   # 10 contenedores: servicios + Postgres + RabbitMQ + Redis
+npm --prefix frontend run dev -- --host                # http://localhost:5173
+docker compose -f ops/nagios/docker-compose.yml -f ops/nagios/docker-compose.local.yml up -d --build
+docker compose -f ops/monitoring/docker-compose.yml -f ops/monitoring/docker-compose.local.yml up -d
+bash ops/nagios/simulacro.sh postgres                  # Operar: incidente en vivo y recuperación
+```
+
+| Qué mostrar | Dónde |
+|---|---|
+| Nagios con todo en verde, y en rojo durante el simulacro | http://localhost:8080/nagios |
+| Dashboard de latencia, errores, predicciones y MAE | http://localhost:3030 → carpeta Whereigo |
+| Targets y reglas de alerta | http://localhost:9090/targets y `/alerts` |
+| Logs JSON de cada predicción | `docker compose logs ai-service` |
+
+Los `.env` locales, la clave del panel de Nagios y `ops/monitoring/secrets/` no van al repo (`.gitignore`).
 
 Activar los hooks de git (una vez por clon): `npm install` en la raíz. El hook necesita `gitleaks` y `ruff` instalados (vienen en el devcontainer).
 

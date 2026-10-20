@@ -1,0 +1,20 @@
+# ops/monitoring/docker-compose.local.yml
+# MODO LOCAL (plan B de la demo): Prometheus + Grafana sobre el stack de la raíz.
+#
+#   1. METRICS_TOKEN=<token> en services/auth-service/.env y services/ai-service/.env
+#      (mismo valor en ops/monitoring/secrets/metrics_token) y `docker compose up -d`.
+#   2. Clave del admin de Grafana en ops/monitoring/secrets/grafana_admin.
+#   3. docker compose -f ops/monitoring/docker-compose.yml -f ops/monitoring/docker-compose.local.yml up -d
+#   Prometheus: http://localhost:9090   Grafana: http://localhost:3030 (usuario admin)
+services:
+  prometheus:
+    volumes:
+      - ./prometheus.local.yml:/etc/prometheus/prometheus.yml:ro
+    networks: [default, whereigo]
+  grafana:
+    networks: [default, whereigo]
+
+networks:
+  whereigo:
+    name: whereigo_default
+    external: true

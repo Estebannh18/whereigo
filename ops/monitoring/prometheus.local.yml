@@ -1,0 +1,23 @@
+# ops/monitoring/prometheus.local.yml
+# MODO LOCAL: Prometheus lee /metrics de los contenedores del docker compose de la
+# raíz (red whereigo_default) por http. Mismo token y mismas reglas que en Render.
+# Uso: ver ops/monitoring/docker-compose.local.yml.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+scrape_configs:
+  - job_name: whereigo
+    scheme: http
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/metrics_token
+    static_configs:
+      - targets: [auth-service:3001]
+        labels: { service: auth-service, part: acceso }
+      - targets: [ai-service:8000]
+        labels: { service: ai-service, part: inteligencia }

@@ -6,14 +6,28 @@ Antes de tocar nada: en el panel de Nagios (http://localhost:8080/nagios), **Ack
 
 ## Arrancar y detener la operación
 
+**Contra Render** (staging):
+
 ```bash
-cp ops/nagios/.env.example ops/nagios/.env
+cp ops/nagios/.env.example ops/nagios/.env      # y completar
 docker compose -f ops/nagios/docker-compose.yml up -d --build
 docker compose -f ops/nagios/docker-compose.yml logs -f nagios
 docker compose -f ops/nagios/docker-compose.yml down
 ```
 
 Nagios solo revisa dentro de la ventana `whereigo-operacion` (ver `ops/nagios/config/00-timeperiods.cfg`). Fuera de ella no genera tráfico, para no gastar las 750 horas gratis al mes de Render.
+
+**Modo local** (plan B de la demo, o para practicar): vigila el stack de `docker compose up -d` por http y 24x7.
+
+```bash
+docker compose up -d                                   # stack completo (raíz del repo)
+npm --prefix frontend run dev -- --host                # frontend accesible desde Nagios
+cp ops/nagios/local.env.example ops/nagios/.env        # y completar clave y cuenta de monitoreo
+docker compose -f ops/nagios/docker-compose.yml -f ops/nagios/docker-compose.local.yml up -d --build
+bash ops/nagios/simulacro.sh postgres                  # simulacro: apagar, detectar, recuperar
+```
+
+Prometheus + Grafana en local: ver `ops/monitoring/docker-compose.local.yml` (Prometheus en `:9090`, Grafana en `:3030`).
 
 Antes de un despliegue planeado o de la demo: en Nagios, **Schedule downtime** sobre el host que se va a desplegar, para que el reinicio no dispare alertas ni el redeploy automático.
 

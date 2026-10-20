@@ -8,8 +8,8 @@ define contact {
     pager                           ${WHEREIGO_TELEGRAM_CHAT_JUANJO}
     host_notifications_enabled      1
     service_notifications_enabled   1
-    host_notification_period        whereigo-operacion
-    service_notification_period     whereigo-operacion
+    host_notification_period        ${WHEREIGO_PERIOD}
+    service_notification_period     ${WHEREIGO_PERIOD}
     host_notification_options       d,u,r
     service_notification_options    w,c,u,r
     host_notification_commands      whereigo_notify_host_telegram
@@ -22,8 +22,8 @@ define contact {
     pager                           ${WHEREIGO_TELEGRAM_CHAT_JUANES}
     host_notifications_enabled      1
     service_notifications_enabled   1
-    host_notification_period        whereigo-operacion
-    service_notification_period     whereigo-operacion
+    host_notification_period        ${WHEREIGO_PERIOD}
+    service_notification_period     ${WHEREIGO_PERIOD}
     host_notification_options       d,u,r
     service_notification_options    w,c,u,r
     host_notification_commands      whereigo_notify_host_telegram

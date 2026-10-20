@@ -4,11 +4,11 @@
 
 define service {
     name                    whereigo-service
-    check_period            whereigo-operacion
+    check_period            ${WHEREIGO_PERIOD}
     check_interval          5
     retry_interval          1
     max_check_attempts      3
-    notification_period     whereigo-operacion
+    notification_period     ${WHEREIGO_PERIOD}
     notification_interval   30
     notification_options    w,c,u,r
     notifications_enabled   1

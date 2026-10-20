@@ -10,12 +10,12 @@ define host {
     name                    whereigo-host
     check_command           whereigo_check_host_https
     _HEALTH_PATH            /health
-    check_period            whereigo-operacion
+    check_period            ${WHEREIGO_PERIOD}
     check_interval          5
     retry_interval          1
     ; 3 intentos: absorben el arranque en frío de Render sin dar falsa alarma.
     max_check_attempts      3
-    notification_period     whereigo-operacion
+    notification_period     ${WHEREIGO_PERIOD}
     notification_interval   30
     notification_options    d,u,r
     notifications_enabled   1
@@ -49,6 +49,7 @@ define host {
     host_name       frontend
     alias           Frontend React (Vercel)
     address         ${WHEREIGO_FRONTEND_HOST}
+    _PORT           ${WHEREIGO_FRONTEND_PORT}
     hostgroups      presentacion
     _HEALTH_PATH    /
     contact_groups  resp-juanes
@@ -59,6 +60,7 @@ define host {
     host_name       gateway
     alias           API Gateway (NestJS, Render)
     address         ${WHEREIGO_GATEWAY_HOST}
+    _PORT           ${WHEREIGO_GATEWAY_PORT}
     hostgroups      acceso
     _RENDER_HOOK    RENDER_HOOK_GATEWAY
     contact_groups  resp-juanjo
@@ -69,6 +71,7 @@ define host {
     host_name       auth-service
     alias           Auth Service (NestJS, Render)
     address         ${WHEREIGO_AUTH_HOST}
+    _PORT           ${WHEREIGO_AUTH_PORT}
     hostgroups      acceso
     _RENDER_HOOK    RENDER_HOOK_AUTH
     contact_groups  resp-juanjo
@@ -79,6 +82,7 @@ define host {
     host_name       ai-service
     alias           AI Service: TinyMLP ETA y tarifas (FastAPI, Render)
     address         ${WHEREIGO_AI_HOST}
+    _PORT           ${WHEREIGO_AI_PORT}
     hostgroups      inteligencia
     _RENDER_HOOK    RENDER_HOOK_AI
     contact_groups  resp-juanjo

@@ -26,7 +26,7 @@ cloud "GitHub" as github {
 
 node "Equipo de operación\n(PC, VM o Codespaces)" as ops {
   node "Nagios Core 4.5\n:8080" as nagios
-  node "Prometheus :9090\n+ Grafana :3001" as prom
+  node "Prometheus :9090\n+ Grafana :3030" as prom
 }
 
 cloud "Telegram" as tg

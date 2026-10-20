@@ -31,10 +31,28 @@ case "${NAGIOSADMIN_PASS:-}" in
     exit 1 ;;
 esac
 
+# Modo: Render (https y puerto 443, por defecto) o local (http y el puerto de cada
+# contenedor del docker compose; ver ops/nagios/local.env.example).
+WHEREIGO_SCHEME="${WHEREIGO_SCHEME:-https}"
+case "$WHEREIGO_SCHEME" in
+  https) WHEREIGO_HTTP_SSL="--ssl --sni"; DEFAULT_PORT=443 ;;
+  http)  WHEREIGO_HTTP_SSL=""; DEFAULT_PORT=80 ;;
+  *) echo "[whereigo] WHEREIGO_SCHEME debe ser https o http" >&2; exit 1 ;;
+esac
+PORTS="WHEREIGO_FRONTEND_PORT WHEREIGO_GATEWAY_PORT WHEREIGO_AUTH_PORT WHEREIGO_AI_PORT"
+for name in $PORTS; do
+  eval "value=\${$name:-$DEFAULT_PORT}"
+  eval "$name=\$value"
+done
+# Ventana de revisión: whereigo-operacion (cuida las horas gratis de Render) o
+# whereigo-24x7 (modo local). Ver config/00-timeperiods.cfg.
+WHEREIGO_PERIOD="${WHEREIGO_PERIOD:-whereigo-operacion}"
+export WHEREIGO_SCHEME WHEREIGO_HTTP_SSL WHEREIGO_PERIOD $PORTS
+
 # Lista explícita: envsubst solo toca estas variables y deja intactas las
 # macros de Nagios ($HOSTADDRESS$, $ARG1$, ...).
 SUBST_VARS=""
-for name in $REQUIRED; do SUBST_VARS="$SUBST_VARS \${$name}"; done
+for name in $REQUIRED WHEREIGO_SCHEME WHEREIGO_HTTP_SSL WHEREIGO_PERIOD $PORTS; do SUBST_VARS="$SUBST_VARS \${$name}"; done
 
 # Primer arranque con el volumen vacío: copiar la config base de la imagen.
 if [ ! -f "$NAGIOS_CFG" ] && [ -d /orig/etc ]; then
