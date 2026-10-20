@@ -1,6 +1,6 @@
 # render.yaml — Blueprint de Render para el backend de Whereigo? (Fase 1).
 # Al conectar este repo en https://dashboard.render.com/blueprints, Render lee
-# este archivo y propone crear: 1 base de datos Postgres + 2 servicios web.
+# este archivo y propone crear: 1 base de datos Postgres + 3 servicios web.
 # Revisa el preview que muestra Render ANTES de confirmar (ahí puedes ajustar
 # nombres/región si hace falta).
 #
@@ -21,12 +21,20 @@ services:
     env: node
     plan: free
     rootDir: services/auth-service
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: npm run start:prod
     healthCheckPath: /health
+    # Lo despliega .github/workflows/deploy.yml solo cuando CI pasa (fase Desplegar).
+    autoDeploy: false
     envVars:
       - key: NODE_ENV
         value: production
+      # Mismo valor que ops/monitoring/secrets/metrics_token (Prometheus).
+      - key: METRICS_TOKEN
+        sync: false
+      # Clave del admin demo que crea el seed. Sin ella se usaría la clave por defecto del código.
+      - key: DEMO_ADMIN_PASSWORD
+        sync: false
       - key: DATABASE_URL
         fromDatabase:
           name: whereigo-postgres
@@ -63,6 +71,9 @@ services:
       # ej. https://whereigo-auth-service.onrender.com).
       - key: AUTH_SERVICE_URL
         sync: false
+      # URL pública de whereigo-ai-service (la usa la transacción login -> ETA de Nagios).
+      - key: AI_SERVICE_URL
+        sync: false
       # Debe ser EXACTAMENTE el mismo valor autogenerado que JWT_ACCESS_SECRET
       # de whereigo-auth-service (cópialo del dashboard de ese servicio).
       - key: JWT_ACCESS_SECRET
@@ -71,4 +82,25 @@ services:
       # https://whereigo.vercel.app (sin barra final). Puedes poner varios
       # separados por coma si agregas un dominio propio después.
       - key: CORS_ORIGINS
+        sync: false
+
+  # Microservicio de IA (ETA y tarifas). Segundo servicio del ciclo de vida.
+  - type: web
+    name: whereigo-ai-service
+    env: python
+    plan: free
+    rootDir: services/ai-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      # En el plan gratis no hay RabbitMQ: el modelo usa congestión por defecto.
+      - key: RABBITMQ_ENABLED
+        value: 'false'
+      - key: MODEL_VERSION
+        value: tinymlp-1.1
+      - key: METRICS_TOKEN
         sync: false

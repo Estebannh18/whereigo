@@ -1,0 +1,10 @@
+# ops/monitoring/grafana/provisioning/dashboards/dashboards.yml
+# Grafana carga al arrancar los dashboards JSON de esta carpeta.
+apiVersion: 1
+providers:
+  - name: whereigo
+    folder: Whereigo
+    type: file
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/provisioning/dashboards

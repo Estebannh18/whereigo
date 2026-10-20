@@ -1,0 +1,44 @@
+# ops/monitoring/alert-rules.yml
+# Reglas de rendimiento y calidad del modelo. La disponibilidad (caído / arriba)
+# la vigila Nagios en la fase de Operar; aquí se miran tendencias.
+groups:
+  - name: whereigo-rendimiento
+    rules:
+      - alert: WhereigoLatenciaAlta
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, service) (rate(http_request_duration_seconds_bucket[10m]))) > 2
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "p95 de latencia de {{ $labels.service }} sobre 2 s"
+
+      - alert: WhereigoTasaDeErrores
+        expr: |
+          sum by (service) (rate(http_requests_total{status=~"5.."}[10m]))
+            / sum by (service) (rate(http_requests_total[10m])) > 0.05
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: "Más del 5 % de respuestas 5xx en {{ $labels.service }}"
+
+  - name: whereigo-modelo
+    rules:
+      - alert: WhereigoModeloDegradado
+        # Mismo umbral que la prueba de calidad del modelo
+        # (services/ai-service/tests/test_model_quality.py). El TinyMLP 1.1 da
+        # ~2 min de MAE con datos sintéticos; sobre 5 el modelo ya no es útil.
+        expr: whereigo_model_mae_rolling{kind="eta"} > 5
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "El MAE del ETA es {{ $value | printf \"%.1f\" }} min: posible drift, reentrenar"
+
+      - alert: WhereigoInferenciaLenta
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, kind) (rate(whereigo_prediction_latency_seconds_bucket[10m]))) > 0.25
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "La inferencia de {{ $labels.kind }} tarda más de 250 ms (p95)"

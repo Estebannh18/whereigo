@@ -1,0 +1,21 @@
+# .github/CODEOWNERS
+# Quién revisa cada parte. Con "PR obligatorio + revisión de code owners" en la
+# protección de main, GitHub pide su aprobación automáticamente.
+#
+# PENDIENTE: agregar el usuario de GitHub de Juan José Gamboa al lado de
+# @Estebannh18 en las secciones "Acceso e inteligencia" e "Infraestructura".
+# Mientras tanto, todo lo revisa @Estebannh18.
+
+*                         @Estebannh18
+
+# Acceso e inteligencia (responsable: Juanjo)
+/services/auth-service/   @Estebannh18
+/services/gateway/        @Estebannh18
+/services/ai-service/     @Estebannh18
+
+# Infraestructura como código y operación: siempre los dos
+/render.yaml              @Estebannh18
+/docker-compose.yml       @Estebannh18
+/frontend/vercel.json     @Estebannh18
+/.github/                 @Estebannh18
+/ops/                     @Estebannh18

@@ -1,0 +1,7 @@
+# ops/monitoring/targets/whereigo.yml.example
+# Copiar como whereigo.yml y poner los dominios reales de Render (sin https://).
+# Los dos microservicios del ciclo de vida exponen /metrics con METRICS_TOKEN.
+- targets: [whereigo-auth-service.onrender.com]
+  labels: { service: auth-service, part: acceso }
+- targets: [whereigo-ai-service.onrender.com]
+  labels: { service: ai-service, part: inteligencia }

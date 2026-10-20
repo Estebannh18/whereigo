@@ -1,0 +1,51 @@
+# .github/workflows/deploy.yml
+# Fase Desplegar: cuando CI termina en verde sobre main, despliega los dos
+# microservicios del ciclo de vida en Render con sus deploy hooks y verifica cada
+# /health (smoke test).
+# Requiere autoDeploy: false en render.yaml para que Render no despliegue por su cuenta.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { service: auth-service, hook: RENDER_HOOK_AUTH, url: AUTH_URL }
+          - { service: ai-service,   hook: RENDER_HOOK_AI,   url: AI_URL }
+    steps:
+      - name: Disparar el deploy en Render con el commit que pasó CI
+        env:
+          HOOK: ${{ secrets[matrix.hook] }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ -z "$HOOK" ]; then echo "Sin hook para ${{ matrix.service }}: se omite"; exit 0; fi
+          curl -fsS -X POST "${HOOK}&ref=${SHA}" -o /dev/null
+          echo "Deploy de ${{ matrix.service }} @ ${SHA::7} solicitado" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke test de /health (con espera por el build y el arranque en frío)
+        env:
+          BASE_URL: ${{ vars[matrix.url] }}
+        run: |
+          if [ -z "$BASE_URL" ]; then exit 0; fi
+          sleep 60
+          for _ in $(seq 1 20); do
+            if curl -fsS --max-time 30 "$BASE_URL/health"; then
+              echo "✅ ${{ matrix.service }} responde" >> "$GITHUB_STEP_SUMMARY"; exit 0
+            fi
+            sleep 15
+          done
+          echo "❌ ${{ matrix.service }} no respondió /health: hacer rollback (docs/runbook.md)" >> "$GITHUB_STEP_SUMMARY"
+          exit 1

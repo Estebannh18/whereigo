@@ -1,0 +1,149 @@
+# .github/workflows/ci.yml
+# Fases Construir, Probar y Liberar de los dos microservicios del ciclo de vida:
+#   auth-service (NestJS) y ai-service (FastAPI).
+#   PR   -> lint + pruebas + build del servicio que cambió.
+#   main -> además publica las imágenes en GHCR (con escaneo Trivy).
+# Los demás servicios del monorepo todavía no tienen lint ni pruebas: se suman a
+# los filtros y a las matrices cuando las tengan.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    # Fase Código/Liberar: el mismo gitleaks del hook local, sobre todo el historial,
+    # por si alguien hizo commit sin hooks activos. Corre siempre (no depende de carpetas).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Buscar secretos con gitleaks
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 git /repo --redact --verbose
+
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      auth: ${{ steps.filter.outputs.auth-service }}
+      ai: ${{ steps.filter.outputs.ai-service }}
+      ops: ${{ steps.filter.outputs.ops-nagios }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            auth-service: services/auth-service/**
+            ai-service: services/ai-service/**
+            ops-nagios: ops/nagios/**
+
+  auth-service:
+    needs: changes
+    if: ${{ needs.changes.outputs.auth == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/auth-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: services/auth-service/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test -- --coverage
+      - run: npm run build
+      # Solo dependencias de producción. Bloquea vulnerabilidades críticas; las altas
+      # que quedan exigen migrar a NestJS 12 (ver docs/ciclo-de-vida.md).
+      - run: npm audit --omit=dev --audit-level=critical
+
+  ai-service:
+    needs: changes
+    if: ${{ needs.changes.outputs.ai == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/ai-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: services/ai-service/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: pytest -q
+      - run: pip-audit -r requirements.txt
+
+  ops-nagios:
+    needs: changes
+    if: ${{ needs.changes.outputs.ops == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pytest==9.0.3 ruff==0.17.1
+      - run: ruff check ops/nagios
+      - run: pytest ops/nagios/tests -q
+      - name: Validar la configuración de Nagios dentro de su imagen
+        run: |
+          docker build -t whereigo-nagios ops/nagios
+          docker run --rm --env-file ops/nagios/ci.env --entrypoint sh whereigo-nagios \
+            -c 'sed -i "s|^exec /usr/local/bin/start_nagios|exit 0|" /usr/local/bin/whereigo-entrypoint && whereigo-entrypoint'
+
+  publish:
+    # Fase Liberar: solo en main y solo si todo lo anterior pasó o se omitió.
+    needs: [secrets, changes, auth-service, ai-service]
+    if: ${{ github.ref == 'refs/heads/main' && !failure() && !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [auth-service, ai-service]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/whereigo-${{ matrix.service }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: services/${{ matrix.service }}
+          load: true
+          tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+      - name: Escanear la imagen (Trivy) antes de publicarla
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.image.outputs.name }}:${{ github.sha }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - run: |
+          docker tag  "${{ steps.image.outputs.name }}:${{ github.sha }}" "${{ steps.image.outputs.name }}:latest"
+          docker push "${{ steps.image.outputs.name }}:${{ github.sha }}"
+          docker push "${{ steps.image.outputs.name }}:latest"

@@ -1,0 +1,8 @@
+# .gitattributes
+# Archivos que se ejecutan o se leen dentro de contenedores Linux: siempre LF,
+# aunque se clonen en Windows (con CRLF, sh falla con "/bin/sh^M").
+*.sh            text eol=lf
+.husky/*        text eol=lf
+ops/nagios/**   text eol=lf
+*.py            text eol=lf
+Dockerfile      text eol=lf

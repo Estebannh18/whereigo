@@ -1,0 +1,20 @@
+# ops/monitoring/prometheus.yml
+# Fase Monitorear: Prometheus lee /metrics de cada microservicio en Render.
+# /metrics está protegido con un token (METRICS_TOKEN en Render = archivo de secreto aquí).
+global:
+  scrape_interval: 60s
+  evaluation_interval: 60s
+
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+scrape_configs:
+  - job_name: whereigo
+    scheme: https
+    metrics_path: /metrics
+    scrape_timeout: 30s          # arranque en frío de Render
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/metrics_token
+    file_sd_configs:
+      - files: [/etc/prometheus/targets/*.yml]

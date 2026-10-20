@@ -1,0 +1,19 @@
+# ops/nagios/docker-compose.yml
+# Levantar:  docker compose -f ops/nagios/docker-compose.yml up -d --build
+# Panel:     http://localhost:8080/nagios  (usuario y clave del .env)
+services:
+  nagios:
+    build: .
+    container_name: whereigo-nagios
+    env_file: .env
+    environment:
+      NAGIOS_TIMEZONE: America/Bogota
+    ports:
+      # Solo en el propio equipo: el panel no queda expuesto a la red.
+      - "127.0.0.1:8080:80"
+    volumes:
+      - nagios_var:/opt/nagios/var   # historial de estados, logs y retención
+    restart: unless-stopped
+
+volumes:
+  nagios_var:

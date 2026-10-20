@@ -1,0 +1,110 @@
+{
+  "uid": "whereigo-ciclo-vida",
+  "title": "Whereigo — Monitorear (auth-service + ai-service)",
+  "description": "Fase Monitorear: rendimiento de los dos microservicios y calidad del modelo de IA. La disponibilidad la vigila Nagios (fase Operar).",
+  "tags": ["whereigo", "ciclo-de-vida"],
+  "timezone": "America/Bogota",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Prometheus alcanza /metrics",
+      "description": "1 = el scrape funcionó. 0 = servicio dormido en Render o token incorrecto.",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "up{job=\"whereigo\"}", "legendFormat": "{{service}}" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{ "type": "value", "options": { "0": { "text": "caído", "color": "red" }, "1": { "text": "arriba", "color": "green" } } }],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Peticiones por segundo (auth-service)",
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum by (route) (rate(http_requests_total{service=\"auth-service\"}[5m]))", "legendFormat": "{{route}}" }],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Tasa de respuestas 5xx (auth-service)",
+      "description": "Alerta WhereigoTasaDeErrores sobre 5 %.",
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(http_requests_total{service=\"auth-service\",status=~\"5..\"}[10m])) / sum(rate(http_requests_total{service=\"auth-service\"}[10m]))" }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.05 }] }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Latencia p95 por ruta (auth-service)",
+      "description": "Alerta WhereigoLatenciaAlta sobre 2 s.",
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket{service=\"auth-service\"}[10m])))", "legendFormat": "{{route}}" }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 2 }] }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Predicciones por minuto (ai-service)",
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum by (kind, model_version) (rate(whereigo_predictions_total[5m])) * 60", "legendFormat": "{{kind}} · {{model_version}}" }],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "MAE móvil del modelo de ETA (minutos)",
+      "description": "Error medio de las últimas 200 predicciones con valor real (/feedback). Alerta WhereigoModeloDegradado sobre 5.",
+      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "whereigo_model_mae_rolling{kind=\"eta\"}", "legendFormat": "MAE ETA" }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 5 }] }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Latencia p95 de inferencia (ai-service)",
+      "description": "Alerta WhereigoInferenciaLenta sobre 250 ms.",
+      "gridPos": { "x": 12, "y": 13, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, kind) (rate(whereigo_prediction_latency_seconds_bucket[10m])))", "legendFormat": "{{kind}}" }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.25 }] }
+        }
+      }
+    }
+  ]
+}

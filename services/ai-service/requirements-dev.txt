@@ -1,0 +1,7 @@
+# services/ai-service/requirements-dev.txt
+# Herramientas de la fase de Pruebas (local y CI). Producción usa solo requirements.txt.
+-r requirements.txt
+pytest==9.0.3
+httpx==0.27.2
+ruff==0.17.1
+pip-audit==2.7.3

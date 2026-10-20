@@ -1,0 +1,11 @@
+# .husky/pre-commit
+# Antes de cada commit: lint de lo que cambió y búsqueda de secretos.
+# Si gitleaks encuentra una clave (como pasó con el .env.example de Trello), el commit se bloquea.
+npx lint-staged
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "[pre-commit] Falta gitleaks. Instálalo: winget install gitleaks (Windows) o brew install gitleaks." >&2
+  echo "[pre-commit] En el devcontainer/Codespaces: https://github.com/gitleaks/gitleaks/releases" >&2
+  exit 1
+fi
+gitleaks git --pre-commit --staged --redact --verbose

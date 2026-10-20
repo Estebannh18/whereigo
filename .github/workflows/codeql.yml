@@ -1,0 +1,45 @@
+# .github/workflows/codeql.yml
+# Fase Liberar (DevSecOps): análisis estático de seguridad de GitHub sobre el código
+# TypeScript (auth-service) y Python (ai-service). Los hallazgos aparecen en
+# Security → Code scanning. Gratis en repositorios públicos.
+name: CodeQL
+
+on:
+  pull_request:
+    paths: ['services/auth-service/**', 'services/ai-service/**', '.github/workflows/codeql.yml']
+  push:
+    branches: [main]
+    paths: ['services/auth-service/**', 'services/ai-service/**', '.github/workflows/codeql.yml']
+  schedule:
+    - cron: '30 6 * * 1'   # lunes 01:30 hora de Colombia: detecta CVE nuevos sin cambios de código
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            source: services/auth-service
+          - language: python
+            source: services/ai-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+          config: |
+            paths: [${{ matrix.source }}]
+            paths-ignore: ['**/*.spec.ts', '**/tests/**']
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

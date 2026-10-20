@@ -5,17 +5,20 @@ import os
 import threading
 import time
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, Header, HTTPException, Response
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.model import FARE_TARGET_SCALE, TinyMLP, r2_score, train_models
+from app.model import FARE_TARGET_SCALE, TinyMLP, train_models
+from app.observability.logging import setup_logging
+from app.observability.metrics import RollingMAE, metrics_token_is_valid, record_prediction, render_metrics
 from app.rabbitmq.consumer import start_rabbitmq_consumer
 
-logging.basicConfig(level=logging.INFO)
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # --- Configuración ---
@@ -25,13 +28,21 @@ RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", "5672"))
 RABBITMQ_USER = os.getenv("RABBITMQ_USER", "whereigo")
 RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD", "changeme")
 RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "traffic.events")
+# Versión del modelo: sale en /health, en las métricas y en las alertas de Nagios.
+MODEL_VERSION = os.getenv("MODEL_VERSION", "tinymlp-1.1")
+# Carpeta de los artefactos del modelo (.npz + feature_stats.json). Si no existen, se entrenan y guardan ahí.
+MODEL_PATH = os.getenv("MODEL_PATH", "app/models")
 
 # Estado de tráfico en memoria: segment_id -> última lectura.
 traffic_state: dict[str, dict[str, Any]] = {}
+# True mientras el consumidor tiene una conexión abierta con RabbitMQ (/health/ready).
+rabbitmq_state = {"connected": False}
 
 # --- Modelos ---
 eta_model: TinyMLP | None = None
 fare_model: TinyMLP | None = None
+# Calidad en producción: MAE móvil contra los valores reales que llegan a /feedback.
+rolling_mae = {"eta": RollingMAE(kind="eta"), "fare": RollingMAE(kind="fare")}
 feature_stats: dict[str, Any] = {"mean": [], "std": []}
 model_features = [
     "distance_km",
@@ -89,28 +100,28 @@ def generate_synthetic_dataset(n_samples: int = 3000) -> pd.DataFrame:
 
 
 def save_models() -> None:
-    os.makedirs("app/models", exist_ok=True)
+    os.makedirs(MODEL_PATH, exist_ok=True)
     if eta_model:
-        eta_model.save("app/models/eta_model.npz")
+        eta_model.save(os.path.join(MODEL_PATH, "eta_model.npz"))
     if fare_model:
-        fare_model.save("app/models/fare_model.npz")
-    with open("app/models/feature_stats.json", "w") as f:
+        fare_model.save(os.path.join(MODEL_PATH, "fare_model.npz"))
+    with open(os.path.join(MODEL_PATH, "feature_stats.json"), "w") as f:
         json.dump(feature_stats, f)
-    logger.info("Modelos guardados en app/models/")
+    logger.info("Modelos guardados", extra={"event": "models_saved", "model_path": MODEL_PATH})
 
 
 def load_models() -> bool:
     global eta_model, fare_model, feature_stats
     try:
         eta_model = TinyMLP(input_size=len(model_features), hidden_size=16)
-        eta_model.load("app/models/eta_model.npz")
+        eta_model.load(os.path.join(MODEL_PATH, "eta_model.npz"))
         fare_model = TinyMLP(input_size=len(model_features), hidden_size=16)
-        fare_model.load("app/models/fare_model.npz")
-        with open("app/models/feature_stats.json", "r") as f:
+        fare_model.load(os.path.join(MODEL_PATH, "fare_model.npz"))
+        with open(os.path.join(MODEL_PATH, "feature_stats.json"), "r") as f:
             feature_stats = json.load(f)
         if "fare_scale" not in feature_stats:
             return False
-        logger.info("Modelos cargados desde app/models/")
+        logger.info("Modelos cargados", extra={"event": "models_loaded", "model_path": MODEL_PATH})
         return True
     except FileNotFoundError:
         return False
@@ -127,10 +138,14 @@ def rabbitmq_worker() -> None:
                 password=RABBITMQ_PASSWORD,
                 exchange=RABBITMQ_EXCHANGE,
                 on_traffic_update=handle_traffic_update,
+                on_connected=lambda: rabbitmq_state.update(connected=True),
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - cualquier fallo de conexión se reintenta
             logger.error(f"RabbitMQ consumer error: {e}. Reintentando en 5s...")
+            rabbitmq_state["connected"] = False
             time.sleep(5)
+        else:
+            rabbitmq_state["connected"] = False
 
 
 def handle_traffic_update(event: dict[str, Any]) -> None:
@@ -176,6 +191,8 @@ class PredictRequest(BaseModel):
 
 
 class PredictResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())  # permite el campo model_version
+
     eta_minutes: float
     fare_cop: float
     distance_km: float
@@ -183,13 +200,25 @@ class PredictResponse(BaseModel):
     is_peak_hour: bool
     is_rainy: bool
     has_incident: bool
+    model_version: str
 
 
 class HealthResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())  # permite model_loaded/model_version
+
     status: str
     service: str
     models_loaded: bool
+    # model_loaded y model_version los revisa Nagios (--require model_loaded).
+    model_loaded: bool
+    model_version: str
     traffic_segments_known: int
+
+
+class FeedbackRequest(BaseModel):
+    kind: Literal["eta", "fare"]
+    predicted: float = Field(..., ge=0, description="Valor que predijo el modelo")
+    actual: float = Field(..., ge=0, description="Valor real observado al terminar el viaje")
 
 
 # --- Helpers ---
@@ -207,7 +236,7 @@ def build_features(req: PredictRequest) -> pd.DataFrame:
     from datetime import datetime
 
     departure = req.departure_time or datetime.now().isoformat()
-    dt = datetime.fromisoformat(departure.replace("Z", "+00:00"))
+    dt = datetime.fromisoformat(departure)  # Python 3.11+ acepta el sufijo "Z"
 
     distance = haversine_distance(
         req.origin_lat, req.origin_lon, req.destination_lat, req.destination_lon
@@ -238,19 +267,39 @@ def build_features(req: PredictRequest) -> pd.DataFrame:
 # --- Endpoints ---
 @app.get("/health", response_model=HealthResponse)
 def health():
+    loaded = eta_model is not None and fare_model is not None
     return HealthResponse(
         status="ok",
         service="ai-service",
-        models_loaded=eta_model is not None and fare_model is not None,
+        models_loaded=loaded,
+        model_loaded=loaded,
+        model_version=MODEL_VERSION,
         traffic_segments_known=len(traffic_state),
     )
+
+
+@app.get("/health/ready")
+def ready():
+    """Dependencias en el formato de @nestjs/terminus que entiende el plugin de Nagios.
+
+    RabbitMQ solo cuenta si está habilitado: en Render gratis corre sin broker.
+    """
+    loaded = eta_model is not None and fare_model is not None
+    details = {"model": {"status": "up" if loaded else "down", "version": MODEL_VERSION}}
+    if RABBITMQ_ENABLED:
+        details["rabbitmq"] = {"status": "up" if rabbitmq_state["connected"] else "down"}
+    info = {name: d for name, d in details.items() if d["status"] == "up"}
+    error = {name: d for name, d in details.items() if d["status"] != "up"}
+    body = {"status": "error" if error else "ok", "info": info, "error": error, "details": details}
+    return JSONResponse(status_code=503 if error else 200, content=body)
 
 
 @app.post("/predict", response_model=PredictResponse)
 def predict(req: PredictRequest):
     if eta_model is None or fare_model is None or not feature_stats["mean"]:
-        return {"error": "Modelos no cargados"}, 503
+        raise HTTPException(status_code=503, detail="Modelos no cargados")
 
+    started = time.perf_counter()
     features = build_features(req)
     X = features[model_features].values
     mean = np.array(feature_stats["mean"])
@@ -261,7 +310,12 @@ def predict(req: PredictRequest):
     fare_scale = float(feature_stats.get("fare_scale", FARE_TARGET_SCALE))
     fare = float(fare_model.predict(X_norm)[0, 0]) * fare_scale
 
-    return PredictResponse(
+    # Una sola inferencia produce ETA y tarifa: se registra la misma duración para ambas.
+    elapsed = time.perf_counter() - started
+    record_prediction("eta", MODEL_VERSION, elapsed)
+    record_prediction("fare", MODEL_VERSION, elapsed)
+
+    response = PredictResponse(
         eta_minutes=round(float(np.clip(eta, 1.0, 240.0)), 1),
         fare_cop=round(float(np.clip(fare, 2500.0, 200000.0)), 0),
         distance_km=round(float(features["distance_km"].iloc[0]), 2),
@@ -269,7 +323,36 @@ def predict(req: PredictRequest):
         is_peak_hour=bool(features["is_peak_hour"].iloc[0]),
         is_rainy=bool(features["is_rainy"].iloc[0]),
         has_incident=bool(features["has_incident"].iloc[0]),
+        model_version=MODEL_VERSION,
     )
+    # MLOps: cada predicción queda con sus variables de entrada para poder compararla
+    # después con el valor real (/feedback) y detectar drift. Sin coordenadas del usuario.
+    logger.info(
+        "prediccion",
+        extra={
+            "event": "prediction",
+            "model_version": MODEL_VERSION,
+            "features": {name: float(features[name].iloc[0]) for name in model_features},
+            "eta_minutes": response.eta_minutes,
+            "fare_cop": response.fare_cop,
+            "latency_ms": round(elapsed * 1000, 2),
+        },
+    )
+    return response
+
+
+@app.post("/feedback")
+def feedback(req: FeedbackRequest):
+    """Valor real de un viaje ya terminado: alimenta el MAE móvil (detección de drift)."""
+    return {"kind": req.kind, "mae": rolling_mae[req.kind].observe(req.predicted, req.actual)}
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics(authorization: str | None = Header(default=None)):
+    if not metrics_token_is_valid(authorization):
+        raise HTTPException(status_code=401, detail="Token de métricas inválido")
+    body, content_type = render_metrics()
+    return Response(content=body, media_type=content_type)
 
 
 @app.get("/traffic-state")

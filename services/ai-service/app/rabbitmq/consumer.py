@@ -1,7 +1,8 @@
 # services/ai-service/app/rabbitmq/consumer.py
 import json
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import pika
 from pika.adapters.blocking_connection import BlockingChannel
@@ -16,6 +17,7 @@ def start_rabbitmq_consumer(
     password: str,
     exchange: str,
     on_traffic_update: Callable[[dict[str, Any]], None],
+    on_connected: Callable[[], None] | None = None,
 ) -> None:
     credentials = pika.PlainCredentials(user, password)
     parameters = pika.ConnectionParameters(
@@ -43,10 +45,12 @@ def start_rabbitmq_consumer(
             if event.get("eventType") == "TrafficUpdated":
                 on_traffic_update(event)
             ch.basic_ack(delivery_tag=method.delivery_tag)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - un mensaje dañado se descarta (nack) sin tumbar el consumidor
             logger.error(f"Error procesando mensaje: {e}")
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
     channel.basic_consume(queue=queue_name, on_message_callback=callback)
     logger.info(f"AI Service escuchando cola {queue_name} en exchange {exchange}")
+    if on_connected:
+        on_connected()  # lo usa /health/ready para reportar RabbitMQ arriba
     channel.start_consuming()

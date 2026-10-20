@@ -1,0 +1,30 @@
+# ops/monitoring/docker-compose.yml
+# Levantar:  docker compose -f ops/monitoring/docker-compose.yml up -d
+# Prometheus: http://localhost:9090   Grafana: http://localhost:3030
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.2
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - ./targets:/etc/prometheus/targets:ro
+      - ./secrets:/etc/prometheus/secrets:ro      # metrics_token (ignorado por git)
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./secrets/grafana_admin:/run/secrets/grafana_admin:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3030:3000"   # 3001 lo usa auth-service
+    depends_on: [prometheus]
+
+volumes:
+  prometheus_data:
+  grafana_data:
